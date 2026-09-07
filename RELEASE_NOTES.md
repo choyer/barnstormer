@@ -9,34 +9,6 @@ original sources rather than redrawn. The renderer is a software rasteriser;
 the only libraries linked are libwayland-client and libxkbcommon, plus ALSA
 for sound. No toolkit, no GL, no SDL.
 
-## Two ways to play
-
-- **Window** — `barnstormer`, an ordinary xdg-shell toplevel.
-- **Breakout** — `barnstormer --breakout`, a wlr-layer-shell overlay with a
-  transparent sky, so the game is painted over your desktop while the pointer
-  still reaches whatever is underneath. `--no-grab` makes it a display rather
-  than a game, for watching the computer pilots fight it out over your work.
-
-`F2` switches between the two at run time. The game supports
-`wp-fractional-scale-v1`, so on a fractionally scaled output it rasterises at
-device resolution instead of being resampled.
-
-## Overlay keyboard recovery
-
-Anything that takes the keyboard exclusively — the Omarchy menu, the
-screenshot picker — takes it from the overlay, and the compositor cannot hand
-it back, because it looks for the surface under the pointer and a click-
-through overlay has no input region to be found by. Barnstormer pauses the
-moment the keyboard goes, reclaims it as soon as the compositor returns the
-pointer, and resumes: a few milliseconds after the menu closes, measured on
-Hyprland 0.56.2. `SIGUSR1` asks for the keyboard back by hand if a compositor
-ever leaves it stranded:
-
-```lua
-o.bind("SUPER + SHIFT + K", "Barnstormer: reclaim keyboard",
-       "pkill -USR1 -x barnstormer")
-```
-
 ## Installing
 
 **Arch and Omarchy** — build the package, which tracks the files and
@@ -59,6 +31,34 @@ cd barnstormer-1.0.0-x86_64 && ./install.sh      # installs to ~/.local
 Either route installs both desktop entries and their icons, so **Sopwith
 Barnstormer** and **Barnstormer Overlay** appear under Apps in the launcher
 and the Omarchy menu.
+
+## Two ways to play
+
+- **Window** — `barnstormer`, an ordinary xdg-shell toplevel.
+- **Breakout** — `barnstormer --breakout`, a wlr-layer-shell overlay with a
+  transparent sky, the game is painted over your desktop while the pointer
+  still reaches whatever is underneath. `--no-grab` makes it a display rather
+  than a game, for watching the computer pilots fight it out over your work.
+
+`F2` switches between the two at run time. The game supports
+`wp-fractional-scale-v1`, so on a fractionally scaled output it rasterises at
+device resolution instead of being resampled.
+
+## Overlay keyboard recovery
+
+Anything that takes the keyboard exclusively — the Omarchy menu, the
+screenshot picker — takes it from the overlay, and the compositor cannot hand
+it back, because it looks for the surface under the pointer and a click-
+through overlay has no input region to be found by. Barnstormer pauses the
+moment the keyboard goes, reclaims it as soon as the compositor returns the
+pointer, and resumes: a few milliseconds after the menu closes, measured on
+Hyprland 0.56.2. `SIGUSR1` asks for the keyboard back by hand if a compositor
+ever leaves it stranded:
+
+```lua
+o.bind("SUPER + SHIFT + K", "Barnstormer: reclaim keyboard",
+       "pkill -USR1 -x barnstormer")
+```
 
 ## What the binary needs
 
@@ -85,4 +85,5 @@ Verify the download against `barnstormer-1.0.0-x86_64.tar.gz.sha256`.
 ## Credits
 
 The original Sopwith is © 1984 BMB Compuscience Canada Ltd., released under
-the terms in `LICENSE.origsopwith.txt`. This re-implementation is GPL-3.0-or-later.
+the terms in `LICENSE.origsopwith.txt`. 
+This re-implementation, Barnstormer created by Carl Hoyer, is GPL-3.0-or-later.
