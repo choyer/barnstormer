@@ -19,6 +19,10 @@
 
 extern const int sw_title_menu_len;
 
+#ifndef BARNSTORMER_VERSION
+#define BARNSTORMER_VERSION "unknown"
+#endif
+
 typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER } uistate_t;
 
 /* SIGUSR1 asks for the keyboard back, for a keybind to fire at the game when
@@ -63,6 +67,8 @@ static void usage(const char *argv0)
 "\n"
 "Usage: %s [options]\n"
 "\n"
+"      --version         print the version and exit\n"
+"\n"
 "Presentation:\n"
 "  -w, --window          play in a window (the default)\n"
 "  -b, --breakout        play as a transparent overlay on your desktop\n"
@@ -104,6 +110,9 @@ int main(int argc, char **argv)
         const char *a = argv[i];
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) {
             usage(argv[0]);
+            return 0;
+        } else if (!strcmp(a, "--version")) {
+            printf("barnstormer %s\n", BARNSTORMER_VERSION);
             return 0;
         } else if (!strcmp(a, "-w") || !strcmp(a, "--window")) {
             style = RENDER_CLASSIC;
