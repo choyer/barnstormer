@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Barnstormer Overlay
+GenericName=Biplane game
+Comment=Fly the 1984 biplane game over your desktop as a transparent overlay
+Exec=barnstormer --breakout
+Icon=barnstormer-overlay
+Terminal=false
+Categories=Game;ArcadeGame;
+Keywords=biplane;arcade;retro;sopwith;dogfight;overlay;breakout;
+StartupWMClass=barnstormer

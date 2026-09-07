@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Sopwith Barnstormer
+GenericName=Biplane game
+Comment=Bomb the enemy from a 1984 biplane, in a window or over your desktop
+Exec=barnstormer
+Icon=barnstormer
+Terminal=false
+Categories=Game;ArcadeGame;
+Keywords=biplane;arcade;retro;sopwith;dogfight;
+StartupWMClass=barnstormer
