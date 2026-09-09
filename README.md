@@ -74,7 +74,7 @@ barnstormer --help
 | `p`       | pause                                        |
 | `r`       | restart the current game                     |
 | `F2`      | switch between window and overlay            |
-| `Esc`     | end the run and show the score, then quit    |
+| `Esc`     | end the run, then the menu, then quit        |
 
 Level every enemy building to win; the difficulty then goes up a notch, enemy
 aircraft get faster and the anti-aircraft batteries reach further. Five crashes
@@ -90,8 +90,9 @@ wildlife and ammunition limits.
 
 The overlay grabs the keyboard while it runs, because otherwise your
 keystrokes would go to the window underneath. `F2` puts the game back in a
-window and `Esc` returns to the title screen, both of which release the
-keyboard. `--no-grab` leaves the keyboard with the desktop, which makes the
+window, which releases the keyboard. `Esc` steps back out one level at a time
+— run, score, title screen — and a last `Esc` from the title quits and
+releases it too. `--no-grab` leaves the keyboard with the desktop, which makes the
 overlay a display rather than a game — useful for watching the computer pilots
 fight it out over your work.
 

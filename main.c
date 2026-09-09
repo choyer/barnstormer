@@ -92,7 +92,7 @@ static void usage(const char *argv0)
 "  space  guns     b  bomb        v  missile     c  flare\n"
 "  h  fly home     s  sound       p  pause       F2  window/overlay\n"
 "  r  restart the current game\n"
-"  Esc  end the run, then quit\n",
+"  Esc  end the run, then back to the menu, then quit\n",
         argv0, MAX_GAME);
 }
 
@@ -215,10 +215,15 @@ int main(int argc, char **argv)
         int ev;
         while ((ev = platform_take_event(plat)) != SWKEY_NONE) {
             switch (ev) {
+            /* Esc walks back out one step at a time -- run, then score,
+             * then the title screen -- so quitting is always a deliberate
+             * press from the menu rather than one key away mid-flight. */
             case SWKEY_QUIT:
                 if (ui == UI_PLAY || ui == UI_PAUSED) {
                     game_abandon(&game);
                     ui = UI_OVER;
+                } else if (ui == UI_OVER) {
+                    ui = UI_TITLE;
                 } else {
                     running = false;
                 }

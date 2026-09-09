@@ -436,7 +436,8 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
         { "X  FASTER       Z  SLOWER   SPACE GUNS",  1, PAL_HUD_DIM, 0 },
         { "B  BOMB         V  MISSILE     C FLARE",  1, PAL_HUD_DIM, 0 },
         { "H  FLY HOME     S  SOUND       P PAUSE",  1, PAL_HUD_DIM, 0 },
-        { "F2 WINDOW / OVERLAY       ESC  END RUN",  1, PAL_HUD_DIM, 3 },
+        { "F2 WINDOW / OVERLAY       ESC  END RUN",  1, PAL_HUD_DIM, 0 },
+        { "ESC FROM THIS SCREEN QUITS",              1, PAL_HUD_DIM, 3 },
         { "PRESS ENTER TO FLY",                      2, PAL_TEAM1,   0 },
     };
     const int n = (int)(sizeof(lines) / sizeof(lines[0]));
@@ -520,7 +521,7 @@ void render_gameover(framebuf_t *fb, const render_ctx_t *c, game_t *g)
     fb_text(fb, cx - fb_text_width(ts * 2, buf) / 2, fb->h / 3 + 30 * ts,
             ts * 2, sw_palette[PAL_HUD], buf);
 
-    const char *again = "ENTER TO PLAY AGAIN    ESC TO QUIT";
+    const char *again = "ENTER TO PLAY AGAIN    ESC FOR MENU";
     fb_text(fb, cx - fb_text_width(ts, again) / 2, fb->h / 3 + 60 * ts,
             ts, sw_palette[PAL_HUD_DIM], again);
 }
