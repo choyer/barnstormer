@@ -1,4 +1,4 @@
-# Barnstormer 1.0.0
+# Barnstormer 1.0.1
 
 Sopwith re-implemented for Wayland: David L. Clark's 1984 biplane dogfight,
 in a window or flying as a transparent overlay across your desktop.
@@ -8,6 +8,18 @@ fixed 12.14 moves a second — and so is the artwork, extracted from the
 original sources rather than redrawn. The renderer is a software rasteriser;
 the only libraries linked are libwayland-client and libxkbcommon, plus ALSA
 for sound. No toolkit, no GL, no SDL.
+
+## Changes in 1.0.1
+
+**`Esc` no longer quits from the score screen.** It now steps back out one
+level at a time — run, then score, then the title screen — so leaving the game
+is always a deliberate press from the menu rather than one key away mid-flight.
+The score screen says `ESC FOR MENU`, and the title screen says that `Esc`
+there quits.
+
+Also corrected the README's claim that `Esc` releases the keyboard in overlay
+mode. `F2` does; `Esc` back to the title screen does not, because the overlay
+keeps its grab until the game actually quits.
 
 ## Installing
 
@@ -19,11 +31,11 @@ git clone https://github.com/choyer/barnstormer
 cd barnstormer/packaging && makepkg -si
 ```
 
-**From the tarball** — `barnstormer-1.0.0-x86_64.tar.gz`:
+**From the tarball** — `barnstormer-1.0.1-x86_64.tar.gz`:
 
 ```bash
-tar xzf barnstormer-1.0.0-x86_64.tar.gz
-cd barnstormer-1.0.0-x86_64 && ./install.sh      # installs to ~/.local
+tar xzf barnstormer-1.0.1-x86_64.tar.gz
+cd barnstormer-1.0.1-x86_64 && ./install.sh      # installs to ~/.local
 ```
 
 **From source** — `make && make install PREFIX=$HOME/.local`.
@@ -80,7 +92,7 @@ without alsa-lib present simply has no sound.
 Without layer-shell the game still runs in a window; it prints a notice and
 falls back.
 
-Verify the download against `barnstormer-1.0.0-x86_64.tar.gz.sha256`.
+Verify the download against `barnstormer-1.0.1-x86_64.tar.gz.sha256`.
 
 ## Credits
 

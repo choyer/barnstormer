@@ -1,7 +1,7 @@
 # Maintainer: Carl Hoyer <carl@hoyer.ca>
 
 pkgname=barnstormer
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Sopwith re-implemented for Wayland: a 1984 biplane dogfight in a window or as a desktop overlay"
 arch=('x86_64')
