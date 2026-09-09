@@ -10,7 +10,7 @@ license=('GPL-3.0-or-later')
 depends=('wayland' 'libxkbcommon' 'alsa-lib')
 makedepends=('wayland')   # wayland-scanner
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')       # replace with the tag tarball's checksum before AUR
+sha256sums=('9237e59c53e978144236541ecda0b5066cead5d23cd3afcd8754475553d3b0bb')
 
 build() {
   cd "$pkgname-$pkgver"
