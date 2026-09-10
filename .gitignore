@@ -3,3 +3,6 @@ build/
 *.d
 *.ppm
 dist/
+packaging/pkg/
+packaging/src/
+*.pkg.tar.zst

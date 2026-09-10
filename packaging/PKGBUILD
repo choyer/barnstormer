@@ -1,7 +1,20 @@
 # Maintainer: Carl Hoyer <carl@hoyer.ca>
+#
+# Builds the package from THIS CHECKOUT:
+#
+#     cd packaging && makepkg -si
+#
+# There is deliberately no source= and no sha256sums= here. Nothing is
+# downloaded, so there is nothing to verify, and a SKIP cannot creep back in.
+#
+# The PKGBUILD for a published release -- one that fetches the tag tarball and
+# checks it against a real checksum -- cannot live in the tag it describes,
+# because the checksum only exists once the tag does. It is generated after
+# tagging by tools/mkpkgbuild.sh, attached to the release, and is the copy that
+# goes to the AUR. See RELEASING.md.
 
 pkgname=barnstormer
-pkgver=1.0.1
+pkgver=$(sed -n 's/^VERSION[[:space:]]*:=[[:space:]]*//p' "$startdir/../Makefile")
 pkgrel=1
 pkgdesc="Sopwith re-implemented for Wayland: a 1984 biplane dogfight in a window or as a desktop overlay"
 arch=('x86_64')
@@ -9,20 +22,18 @@ url="https://github.com/choyer/barnstormer"
 license=('GPL-3.0-or-later')
 depends=('wayland' 'libxkbcommon' 'alsa-lib')
 makedepends=('wayland')   # wayland-scanner
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('9237e59c53e978144236541ecda0b5066cead5d23cd3afcd8754475553d3b0bb')
 
 build() {
-  cd "$pkgname-$pkgver"
+  cd "$startdir/.."
   make
 }
 
 check() {
-  cd "$pkgname-$pkgver"
+  cd "$startdir/.."
   make test
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd "$startdir/.."
   make install PREFIX=/usr DESTDIR="$pkgdir"
 }
