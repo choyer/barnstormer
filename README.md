@@ -108,6 +108,28 @@ away, and it will not fly upside down without the stick input to match — the
 1984 flight model is unforgiving on purpose. Novice mode turns off stalls,
 wildlife and ammunition limits.
 
+### Motion
+
+The simulation advances 12.14 times a second, as the original's did, and on a
+320x200 screen a 4-12 pixel step a tick was near invisible. Magnified eight
+times onto a full-screen overlay it is 32-96 pixels, twelve times a second,
+against a perfectly still desktop -- which reads as judder.
+
+The game therefore draws between those positions. Nothing about the
+simulation changes: it still advances exactly 12.14 times a second, the
+physics and collisions are identical, and the deterministic replay test hashes
+the same either way. Only where things are painted moves.
+
+Aircraft, scenery and the camera are offset half a tick either side of their
+simulated position, so the display's timing averages out to the original's
+exactly -- no added latency in either direction. Shots, bombs and missiles are
+offset backwards instead, drawn between where they were and where they are:
+they die the instant they touch something, and drawing one ahead would put it
+through the wall that is about to stop it.
+
+`--no-smooth` turns all of it off and draws only the positions the simulation
+produces, which is what the original did.
+
 ### Breakout mode
 
 The overlay grabs the keyboard while it runs, because otherwise your

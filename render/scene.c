@@ -9,6 +9,7 @@
  * World space has y increasing upwards from the bottom of the map; screen
  * space does the opposite, so every draw goes through world_row().
  */
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -32,28 +33,80 @@ void render_layout(render_ctx_t *c, render_style_t style, int fb_w, int fb_h)
     c->oy = (fb_h - c->view_h * s) / 2;
 
     c->solid = (style == RENDER_BREAKOUT);
+    c->lead_ticks = 0.0;        /* exactly as simulated, until asked */
+    c->trail_ticks = 0.0;
+}
+
+/* Where something is `ticks` of a tick from its simulated position, given its
+ * per-tick delta.  Reconstructing from velocity rather than from a stored
+ * previous position keeps this entirely inside the renderer: nothing has to be
+ * remembered between ticks, and objects that spawn or teleport need no special
+ * case.
+ *
+ * Which way to offset matters at this tick rate.  Trailing the simulation, the
+ * usual way to interpolate, shows a state up to a whole tick old -- 82ms here,
+ * enough to feel sluggish against the original, which drew each tick exactly
+ * as simulated.  Leading removes that but draws up to a tick of future that
+ * has not been tested against anything.  Centring splits the difference: half
+ * a tick either side, averaging exactly the original's timing, with half the
+ * overshoot. */
+static inline double lead(double cur, double delta, double ticks)
+{
+    return cur + ticks * delta;
+}
+
+/* An object's movement per tick, in world pixels.  The simulation keeps a
+ * 16-bit fraction it carries between ticks, so the true speed is the integer
+ * step plus that fraction -- which is exactly the jitter worth smoothing. */
+/* Whether it is safe to draw this object ahead of the simulation.
+ *
+ * Anything that dies the instant it touches something is not: the simulation
+ * tests a shot against the terrain at its own position, so drawing it a tick
+ * further on puts it inside walls and under the ground for a frame before the
+ * tick that removes it.  A bullet covers ten world pixels a tick, which on a
+ * full-screen overlay is eighty pixels of visible penetration.
+ *
+ * They are drawn trailing instead of simply pinned to the simulated position:
+ * pinning them while the camera moves smoothly is worse than either, because
+ * the shot then slides backwards with the camera all tick and jumps forward
+ * when the tick fires.  Trailing keeps them continuous and keeps them behind
+ * the collision test. */
+static inline bool leads(const object_t *ob)
+{
+    return ob->type != OBJ_SHOT && ob->type != OBJ_BOMB &&
+           ob->type != OBJ_MISSILE;
+}
+
+static inline double vel_x(const object_t *ob)
+{
+    return ob->dx + ob->ldx / 65536.0;
+}
+static inline double vel_y(const object_t *ob)
+{
+    return ob->dy + ob->ldy / 65536.0;
 }
 
 /* Left-hand world column of the view, centred on wherever the game has put
  * its 320-wide window. */
-static int view_left(const render_ctx_t *c, const game_t *g)
+static double view_left(const render_ctx_t *c, const game_t *g)
 {
-    int left = g->displx + SCR_WDTH / 2 - c->view_w / 2;
-    int max = MAX_X - c->view_w;
+    double left = lead(g->displx, g->dispdx, c->lead_ticks)
+                  + SCR_WDTH / 2 - c->view_w / 2;
+    double max = MAX_X - c->view_w;
     if (max < 0) max = 0;
     if (left < 0) left = 0;
     if (left > max) left = max;
     return left;
 }
 
-static inline int screen_x(const render_ctx_t *c, int left, int wx)
+static inline int screen_x(const render_ctx_t *c, double left, double wx)
 {
-    return c->ox + (wx - left) * c->scale;
+    return c->ox + (int)lround((wx - left) * c->scale);
 }
 
-static inline int screen_y(const render_ctx_t *c, int wy)
+static inline int screen_y(const render_ctx_t *c, double wy)
 {
-    return c->oy + (c->view_h - 1 - wy) * c->scale;
+    return c->oy + (int)lround((c->view_h - 1 - wy) * c->scale);
 }
 
 /* ---- colours ----------------------------------------------------------- */
@@ -95,14 +148,16 @@ static void draw_sky(framebuf_t *fb, const render_ctx_t *c)
 /* ---- terrain ----------------------------------------------------------- */
 
 static void draw_ground(framebuf_t *fb, const render_ctx_t *c, game_t *g,
-                        int left)
+                        double left)
 {
     int s = c->scale;
     uint32_t body = sw_palette[PAL_GROUND];
     uint32_t edge = sw_palette[PAL_GROUND_EDGE];
 
-    for (int col = 0; col < c->view_w; col++) {
-        int wx = left + col;
+    /* One column past the right edge: a camera part way between world pixels
+     * shifts everything left, and without it the last column leaves a gap. */
+    int first = (int)floor(left);
+    for (int wx = first; wx <= first + c->view_w; wx++) {
         if (wx < 0 || wx >= MAX_X)
             continue;
         int h = g->ground[wx];
@@ -123,19 +178,26 @@ static void draw_ground(framebuf_t *fb, const render_ctx_t *c, game_t *g,
 /* ---- objects ----------------------------------------------------------- */
 
 static void draw_object(framebuf_t *fb, const render_ctx_t *c,
-                        const object_t *ob, int left)
+                        const object_t *ob, double left)
 {
     int s = c->scale;
 
+    /* Both the object and the camera are wound back by the same fraction of
+     * a tick, so anything the camera is pinned to (the player) stays put on
+     * screen while the world scrolls under it. */
+    double a = leads(ob) ? c->lead_ticks : c->trail_ticks;
+    double wx = lead(ob->x, vel_x(ob), a);
+    double wy = lead(ob->y, vel_y(ob), a);
+
     if (ob->sprite_set < 0) {
         /* Bullets and smoke are single pixels. */
-        if (ob->x < left || ob->x >= left + c->view_w)
+        if (ob->x < left - 1 || ob->x >= left + c->view_w + 1)
             return;
-        if (ob->y < 0 || ob->y >= c->view_h)
+        if (ob->y < -1 || ob->y >= c->view_h + 1)
             return;
         uint32_t col = ob->type == OBJ_SMOKE ? sw_palette[PAL_HUD_DIM]
                                              : sw_palette[PAL_NEUTRAL];
-        fb_rect(fb, screen_x(c, left, ob->x), screen_y(c, ob->y), s, s, col);
+        fb_rect(fb, screen_x(c, left, wx), screen_y(c, wy), s, s, col);
         return;
     }
 
@@ -145,19 +207,22 @@ static void draw_object(framebuf_t *fb, const render_ctx_t *c,
                                  : sprite_frame(ob->sprite_set,
                                                 ob->sprite_frame);
 
+    int bx = screen_x(c, left, wx);
+    int by = screen_y(c, wy);
+
     for (int row = 0; row < set->h; row++) {
-        int wy = ob->y - row;
-        if (wy < 0 || wy >= c->view_h)
+        int cull = ob->y - row;
+        if (cull < -1 || cull >= c->view_h + 1)
             continue;
-        int y = screen_y(c, wy);
+        int y = by + row * s;
         for (int col = 0; col < set->w; col++) {
             uint8_t v = px[row * set->w + col];
             if (!v)
                 continue;
-            int wx = ob->x + col;
-            if (wx < left || wx >= left + c->view_w)
+            int cx = ob->x + col;
+            if (cx < left - 1 || cx >= left + c->view_w + 1)
                 continue;
-            fb_rect(fb, screen_x(c, left, wx), y, s, s, obj_color(ob, v));
+            fb_rect(fb, bx + col * s, y, s, s, obj_color(ob, v));
         }
     }
 }
@@ -358,7 +423,7 @@ void render_frame(framebuf_t *fb, const render_ctx_t *c, game_t *g)
 {
     draw_sky(fb, c);
 
-    int left = view_left(c, g);
+    double left = view_left(c, g);
 
     draw_ground(fb, c, g, left);
 
@@ -380,7 +445,7 @@ void render_frame(framebuf_t *fb, const render_ctx_t *c, game_t *g)
     }
 
     draw_windscreen(fb, c, g);
-    draw_hud(fb, c, g, left);
+    draw_hud(fb, c, g, (int)lround(left));
 
     /* The loser's flash while the countdown runs; once the run is over the
      * summary screen says it instead. */

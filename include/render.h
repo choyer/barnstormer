@@ -27,6 +27,23 @@ typedef enum { RENDER_CLASSIC = 0, RENDER_BREAKOUT = 1 } render_style_t;
 
 typedef struct {
     render_style_t style;
+    /* How far from its simulated position to draw everything, measured in
+     * simulation ticks and scaled by each object's own velocity.  The world
+     * advances 12.14 times a second; offsetting by a fraction of a tick lets
+     * the display show intermediate positions without the simulation knowing.
+     *
+     * Zero always means exactly the state the tick produced -- what the
+     * original did, and what --no-smooth restores.  Keeping the units as
+     * ticks rather than a 0..1 phase is deliberate: it means changing the
+     * smoothing scheme cannot quietly change which value disables it. */
+    double lead_ticks;
+
+    /* The same, for things that die the instant they touch something.  They
+     * are offset backwards instead, between their previous and current
+     * simulated positions, so they are only ever drawn where the simulation
+     * has already been -- never past the wall that is about to stop them.
+     * Also zero-by-default, for the same reason as above. */
+    double trail_ticks;
     int scale;             /* integer world-pixel magnification            */
     int ox, oy;            /* framebuffer offset of world pixel (0,0)      */
     int view_w, view_h;    /* visible world pixels                         */

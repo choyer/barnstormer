@@ -77,6 +77,8 @@ static void usage(const char *argv0)
 "      --no-grab         in breakout mode, share the keyboard with the\n"
 "                        desktop instead of grabbing it (the overlay then\n"
 "                        cannot be played, only watched)\n"
+"      --no-smooth       draw only the 12.14 positions a second the\n"
+"                        simulation produces, as the original did\n"
 "      --dump-frame F    write one frame to F as a PPM and exit\n"
 "      --dump-after N    wait N frames before dumping (default 0)\n"
 "\n"
@@ -105,6 +107,7 @@ int main(int argc, char **argv)
     int width = SCR_WDTH * 3, height = SCR_HGHT * 3;
     int gamenum = 0;
     bool sound = true, grab = true, skip_title = false;
+    bool smooth = true;
     const char *dump_path = NULL;
     long dump_after = 0;
 
@@ -122,6 +125,8 @@ int main(int argc, char **argv)
             style = RENDER_BREAKOUT;
         } else if (!strcmp(a, "--no-grab")) {
             grab = false;
+        } else if (!strcmp(a, "--no-smooth")) {
+            smooth = false;
         } else if (!strcmp(a, "-n") || !strcmp(a, "--novice")) {
             mode = PLAY_NOVICE; skip_title = true;
         } else if (!strcmp(a, "-s") || !strcmp(a, "--single")) {
@@ -384,6 +389,20 @@ int main(int argc, char **argv)
         if (fb) {
             render_ctx_t ctx;
             render_layout(&ctx, platform_style(plat), fb->w, fb->h);
+
+            /* Where this frame sits inside the tick still being accumulated,
+             * centred so the display runs half a tick early at most and half
+             * a tick late at most, averaging the original's timing exactly.
+             * Only while the world is actually advancing: on a paused or
+             * finished game the accumulator is reset, and a stale fraction
+             * would draw everything half a tick from where it is. */
+            if (smooth && ui == UI_PLAY) {
+                double a = tick_acc / tick_dt;
+                if (a < 0.0) a = 0.0;
+                if (a > 1.0) a = 1.0;
+                ctx.lead_ticks = a - 0.5;
+                ctx.trail_ticks = a - 1.0;   /* never ahead of a collision */
+            }
 
             switch (ui) {
             case UI_TITLE:
