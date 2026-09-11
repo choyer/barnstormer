@@ -42,7 +42,20 @@ enum {
     SWKEY_UP,
     SWKEY_DOWN,
     SWKEY_RESTART,
+    SWKEY_LEFT,
+    SWKEY_RIGHT,
+    SWKEY_BACKSPACE,
+
+    /* Typed characters ride the same queue: a letter or space arrives as
+     * SWKEY_CHAR_BASE + the uppercase character, alongside (not instead of)
+     * any SWKEY_* the same key also means.  States that do not take text
+     * simply ignore them. */
+    SWKEY_CHAR_BASE = 0x100,
 };
+
+#define SWKEY_IS_CHAR(ev) ((ev) >= SWKEY_CHAR_BASE)
+#define SWKEY_CHAR(ev)    ((char)((ev) - SWKEY_CHAR_BASE))
+
 int platform_take_event(platform_t *p);
 
 /* Acquire the next framebuffer.  Returns NULL if no buffer is free yet. */

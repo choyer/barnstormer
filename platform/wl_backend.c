@@ -295,6 +295,17 @@ static uint16_t keysym_to_mask(xkb_keysym_t sym)
     }
 }
 
+/* A-Z and space, whatever the layout calls them; 0 for anything else. */
+static char keysym_to_text(xkb_keysym_t sym)
+{
+    uint32_t u = xkb_keysym_to_utf32(sym);
+    if (u >= 'a' && u <= 'z')
+        return (char)(u - 'a' + 'A');
+    if ((u >= 'A' && u <= 'Z') || u == ' ')
+        return (char)u;
+    return 0;
+}
+
 static int keysym_to_event(xkb_keysym_t sym)
 {
     switch (sym) {
@@ -303,6 +314,9 @@ static int keysym_to_event(xkb_keysym_t sym)
     case XKB_KEY_s: case XKB_KEY_S:       return SWKEY_SOUND;
     case XKB_KEY_F2:                      return SWKEY_STYLE;
     case XKB_KEY_Return: case XKB_KEY_KP_Enter: return SWKEY_ENTER;
+    case XKB_KEY_Left:  case XKB_KEY_KP_Left:   return SWKEY_LEFT;
+    case XKB_KEY_Right: case XKB_KEY_KP_Right:  return SWKEY_RIGHT;
+    case XKB_KEY_BackSpace:               return SWKEY_BACKSPACE;
     case XKB_KEY_Up:                      return SWKEY_UP;
     case XKB_KEY_Down:                    return SWKEY_DOWN;
     case XKB_KEY_r: case XKB_KEY_R:       return SWKEY_RESTART;
@@ -375,6 +389,9 @@ static void kb_key(void *data, struct wl_keyboard *kb, uint32_t serial,
             int ev = keysym_to_event(syms[i]);
             if (ev != SWKEY_NONE)
                 push_event(p, ev);
+            char text = keysym_to_text(syms[i]);
+            if (text)
+                push_event(p, SWKEY_CHAR_BASE + text);
         } else {
             p->keys &= (uint16_t)~mask;
         }

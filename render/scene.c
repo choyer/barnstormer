@@ -525,3 +525,101 @@ void render_gameover(framebuf_t *fb, const render_ctx_t *c, game_t *g)
     fb_text(fb, cx - fb_text_width(ts, again) / 2, fb->h / 3 + 60 * ts,
             ts, sw_palette[PAL_HUD_DIM], again);
 }
+
+/* ---- the high score board ---------------------------------------------- */
+
+/*
+ * The end-of-run screen.  Laid out as a centred stack that shrinks until it
+ * fits, the same trick the title screen uses, so it reads the same in a small
+ * window and on a 4K overlay.  The 5x7 font advances a fixed six units a
+ * character, so the columns are aligned by padding the row strings rather
+ * than by measuring them.
+ */
+void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
+{
+    int ts = c->scale;
+    if (ts < 1) ts = 1;
+    if (ts > 4) ts = 4;
+
+    char scoreline[48], heading[48];
+    char rows[SCORE_ROWS][32];
+
+    snprintf(scoreline, sizeof(scoreline), "FINAL SCORE %d", v->final_score);
+    snprintf(heading, sizeof(heading), "%s HIGH SCORES", v->board_name);
+    for (int i = 0; i < SCORE_ROWS; i++)
+        snprintf(rows[i], sizeof(rows[i]), "%2d  %s %8d",
+                 i + 1, v->table->e[i].name, v->table->e[i].score);
+
+    /* Rank, name, score: the name starts at this character offset, which is
+     * what puts the editing caret under the right initial. */
+    const int name_col = 4;
+
+    title_line_t lines[SCORE_ROWS + 6];
+    int n = 0;
+    lines[n++] = (title_line_t){ v->headline, 3, PAL_TEAM2, 1 };
+    lines[n++] = (title_line_t){ scoreline, 2, PAL_HUD, 0 };
+    if (!v->ranked)
+        lines[n++] = (title_line_t){ "NOT RANKED", 1, PAL_HUD_DIM, 0 };
+    lines[n++] = (title_line_t){ heading, 1, PAL_TITLE2, 2 };
+
+    int first_row = n;
+    for (int i = 0; i < SCORE_ROWS; i++)
+        lines[n++] = (title_line_t){
+            rows[i], 2,
+            i == v->highlight ? PAL_TEAM1 : PAL_HUD_DIM,
+            i == SCORE_ROWS - 1 ? 2 : 0,
+        };
+
+    if (v->edit_cell >= 0)
+        lines[n++] = (title_line_t){
+            "UP DOWN LETTER PICKS    ENTER WHEN DONE", 1, PAL_HUD, 0 };
+    else
+        lines[n++] = (title_line_t){
+            "ENTER TO PLAY AGAIN    ESC FOR MENU", 1, PAL_HUD_DIM, 0 };
+    if (!v->saved)
+        lines[n++] = (title_line_t){ "SCORES NOT SAVED", 1, PAL_TEAM2, 0 };
+
+    int total = 0, widest = 0;
+    for (;;) {
+        total = 0;
+        widest = 0;
+        for (int i = 0; i < n; i++) {
+            total += (7 + 3 + lines[i].gap * 3) * ts * lines[i].scale;
+            int w = fb_text_width(ts * lines[i].scale, lines[i].text);
+            if (w > widest)
+                widest = w;
+        }
+        if (ts <= 1)
+            break;
+        if (total + 40 * ts <= fb->h && widest + 16 * ts <= fb->w)
+            break;
+        ts--;
+    }
+
+    int y = (fb->h - total) / 2;
+    if (y < 10 * ts)
+        y = 10 * ts;
+    int cx = fb->w / 2;
+
+    fb_blend_rect(fb, 0, 0, fb->w, fb->h, 0xB0000000);
+    if (c->style == RENDER_BREAKOUT)
+        fb_blend_rect(fb, cx - widest / 2 - 8 * ts, y - 8 * ts,
+                      widest + 16 * ts, total + 16 * ts,
+                      sw_palette[PAL_HUD_BG]);
+
+    for (int i = 0; i < n; i++) {
+        int sc = ts * lines[i].scale;
+        int x = cx - fb_text_width(sc, lines[i].text) / 2;
+        fb_text(fb, x, y, sc, sw_palette[lines[i].pal], lines[i].text);
+
+        /* The caret sits under the initial being edited, and blinks so it is
+         * obvious the board is waiting for you rather than finished. */
+        if (v->edit_cell >= 0 && v->highlight >= 0 &&
+            i == first_row + v->highlight && ((v->t / 8) & 1)) {
+            int bar = sc / 4 < 1 ? 1 : sc / 4;
+            fb_rect(fb, x + (name_col + v->edit_cell) * 6 * sc, y + 8 * sc,
+                    5 * sc, bar, sw_palette[PAL_TEAM1]);
+        }
+        y += (7 + 3 + lines[i].gap * 3) * sc;
+    }
+}

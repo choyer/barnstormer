@@ -18,6 +18,14 @@
  * Everything in the physics is tuned around that number. */
 #define GAME_TICK_HZ 12.1377
 
+/* How a run finished.  Only the first two rank on the high score table. */
+typedef enum {
+    RUN_ONGOING = 0,
+    RUN_CRASHED,       /* the fifth crash: the arcade way out            */
+    RUN_RETIRED,       /* flew home, landed, and stopped                 */
+    RUN_ABANDONED,     /* bailed out mid-air, score forfeit              */
+} runend_t;
+
 typedef struct {
     int   type;        /* S_* priority, S_NONE when silent               */
     int   tone;        /* PIT divisor, as the original wrote to port 42h */
@@ -81,7 +89,16 @@ struct game {
     bool quit;                     /* player pressed the bail-out key     */
     bool over;                     /* run is finished, show the summary   */
     const char *over_msg;
+    runend_t end_reason;           /* how it finished, and whether it ranks */
 };
+
+/* Whether a finished run counts for the high score table.  Flying into the
+ * ground for the fifth time and retiring at your own airfield both do;
+ * bailing out mid-air forfeits the score. */
+static inline bool game_ranked(const game_t *g)
+{
+    return g->end_reason == RUN_CRASHED || g->end_reason == RUN_RETIRED;
+}
 
 /* Build a fresh run.  `level` must outlive the game. */
 void game_start(game_t *g, const level_t *level, playmode_t mode, int gamenum);

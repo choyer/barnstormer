@@ -1,4 +1,4 @@
-# Barnstormer 1.0.1
+# Barnstormer 1.1.0
 
 Sopwith re-implemented for Wayland: David L. Clark's 1984 biplane dogfight,
 in a window or flying as a transparent overlay across your desktop.
@@ -9,17 +9,51 @@ original sources rather than redrawn. The renderer is a software rasteriser;
 the only libraries linked are libwayland-client and libxkbcommon, plus ALSA
 for sound. No toolkit, no GL, no SDL.
 
-## Changes in 1.0.1
+## Changes in 1.1.0
 
-**`Esc` no longer quits from the score screen.** It now steps back out one
-level at a time — run, then score, then the title screen — so leaving the game
-is always a deliberate press from the menu rather than one key away mid-flight.
-The score screen says `ESC FOR MENU`, and the title screen says that `Esc`
-there quits.
+### High scores
 
-Also corrected the README's claim that `Esc` releases the keyboard in overlay
-mode. `F2` does; `Esc` back to the title screen does not, because the overlay
-keeps its grab until the game actually quits.
+A local arcade leaderboard: ten entries a board, three initials each, and a
+board apiece for novice, single player and against the computer. A run in one
+mode is not comparable with a run in another -- single player is capped at
+2,175 a level, while the computer board has no ceiling at all -- so they are
+kept apart. Each board ships with built-in defaults, and every finished run
+shows you what you scored against the board it was measured on.
+
+Initials are entered the way a cabinet does it: three cells, A-Z and space,
+Up and Down to cycle, Left and Right to move, and a blinking caret on the
+cell you are on. Typing the letter works too, because this is a keyboard.
+
+Scores live in `$XDG_DATA_HOME/barnstormer/scores` (`~/.local/share` by
+default), written the moment an entry is committed, and survive updates --
+nothing the package installs writes to that directory. The file is plain
+text. If it goes missing the built-in defaults come back; if it is damaged it
+is moved aside rather than overwritten.
+
+### A run can now end
+
+Your fifth crash used to rebuild the world with the score silently reset to
+zero, so a run had no end and nothing to record. It now ends:
+
+| How it ends | Shows | Ranked? |
+|---|---|---|
+| Fifth crash | `GAME OVER` | yes |
+| `Esc` parked at your own airfield | `RETIRED` | yes |
+| `Esc` in the air | `ABANDONED` | no |
+
+Flying home and landing is how you bank a score without throwing the aircraft
+at the ground five times. Retiring is a deliberate press rather than automatic
+on touchdown, because landing is also how you refuel and rearm.
+
+This is a change to the simulation, not just the interface: the soak tests now
+report the difficulty they were started at instead of 0, because a death no
+longer resets the run.
+
+### Also
+
+`make test-ui` drives the real binary through every screen with synthetic key
+events, which is the only way to test a state machine that exists in response
+to real input.
 
 ## Installing
 
@@ -31,11 +65,11 @@ git clone https://github.com/choyer/barnstormer
 cd barnstormer/packaging && makepkg -si
 ```
 
-**From the tarball** — `barnstormer-1.0.1-x86_64.tar.gz`:
+**From the tarball** — `barnstormer-1.1.0-x86_64.tar.gz`:
 
 ```bash
-tar xzf barnstormer-1.0.1-x86_64.tar.gz
-cd barnstormer-1.0.1-x86_64 && ./install.sh      # installs to ~/.local
+tar xzf barnstormer-1.1.0-x86_64.tar.gz
+cd barnstormer-1.1.0-x86_64 && ./install.sh      # installs to ~/.local
 ```
 
 **From source** — `make && make install PREFIX=$HOME/.local`.
@@ -92,7 +126,7 @@ without alsa-lib present simply has no sound.
 Without layer-shell the game still runs in a window; it prints a notice and
 falls back.
 
-Verify the download against `barnstormer-1.0.1-x86_64.tar.gz.sha256`.
+Verify the download against `barnstormer-1.1.0-x86_64.tar.gz.sha256`.
 
 ## Credits
 

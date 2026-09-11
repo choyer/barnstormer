@@ -20,7 +20,9 @@ and why.
 
 ```sh
 make          # -> build/barnstormer
-make test     # headless simulation soak test (ASan + UBSan)
+make test     # headless soak + high score tests (ASan + UBSan)
+make test-ui  # drives the real binary through every screen (needs
+              # a Wayland session and wtype; takes the keyboard)
 
 # Install for your user only -- no root needed, and ~/.local/bin is already
 # on the session PATH on Omarchy.  Installs the binary, a .desktop entry and
@@ -74,7 +76,27 @@ barnstormer --help
 | `p`       | pause                                        |
 | `r`       | restart the current game                     |
 | `F2`      | switch between window and overlay            |
-| `Esc`     | end the run, then the menu, then quit        |
+| `Esc`     | parked at home: retire and keep the score    |
+|           | in the air: abandon the run, score forfeit   |
+|           | on the score screen: the menu, then quit     |
+
+### High scores
+
+Ten entries a board, three initials each, and a board apiece for novice,
+single player and against the computer -- a run in one mode is not comparable
+with a run in another, since single player is capped at 2,175 a level while
+the computer board is not capped at all.
+
+A run ends in one of three ways. Your fifth crash is `GAME OVER` and counts.
+Flying home, landing and pressing `Esc` while parked is a `RETIRED` run and
+also counts -- it is how you bank a score without throwing the aircraft at the
+ground. Pressing `Esc` in the air is `ABANDONED` and forfeits the score. All
+three show you what you scored and the board it was measured against.
+
+Scores live in `~/.local/share/barnstormer/scores` (or `$XDG_DATA_HOME`), are
+written the moment an entry is committed, and survive updates -- nothing the
+package installs writes to that directory. It is a plain text file; if it goes
+missing the built-in defaults come back.
 
 Level every enemy building to win; the difficulty then goes up a notch, enemy
 aircraft get faster and the anti-aircraft batteries reach further. Five crashes

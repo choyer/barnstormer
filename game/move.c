@@ -358,10 +358,16 @@ static bool move_player(game_t *g, object_t *ob, uint16_t key)
     g->cur_endstat = g->endsts[g->player];
     if (g->cur_endstat && --g->endcount <= 0) {
         if (g->quit) {
-            g->over = true;
-            g->over_msg = "You bailed out.";
+            g->over = true;                 /* message set by game_abandon */
+        } else if (g->cur_endstat == END_WINNER) {
+            game_restart(g);                /* on to the next, score kept  */
         } else {
-            game_restart(g);
+            /* Out of aircraft.  This used to rebuild the world with the
+             * score reset to zero, which meant a run had no end and nothing
+             * to record.  It ends here now, score intact. */
+            g->over = true;
+            g->end_reason = RUN_CRASHED;
+            g->over_msg = "GAME OVER";
         }
         return true;
     }

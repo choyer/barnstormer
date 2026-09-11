@@ -623,6 +623,7 @@ static void build_world(game_t *g)
     g->quit = false;
     g->over = false;
     g->over_msg = NULL;
+    g->end_reason = RUN_ONGOING;
     g->shothole = g->splatbird = g->splatox = 0;
     g->oxsplatted = false;
     g->terrain_dirty = true;
@@ -675,12 +676,19 @@ void game_restart(game_t *g)
 void game_abandon(game_t *g)
 {
     object_t *p = &g->pool[g->player];
+
+    /* Parked on your own runway is an honourable retirement and keeps the
+     * score.  Quitting from the air throws it away.  Landing itself cannot
+     * end the run: being stopped at home is also how you rearm. */
+    bool parked = p->athome && p->speed == 0 && p->state == ST_FLYING;
+
     p->life = QUIT_LIFE;
     p->home = false;
     g->quit = true;
     g->over = true;
     g->endsts[g->player] = END_LOSER;
-    g->over_msg = "GAME ABANDONED";
+    g->end_reason = parked ? RUN_RETIRED : RUN_ABANDONED;
+    g->over_msg = parked ? "RETIRED" : "ABANDONED";
     sw_sound_reset(g);
 }
 

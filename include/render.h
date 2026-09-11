@@ -14,6 +14,7 @@
 #define RENDER_H
 
 #include "game.h"
+#include "score.h"
 #include "sprites.h"
 
 typedef struct {
@@ -65,6 +66,24 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
 
 /* End-of-run summary. */
 void render_gameover(framebuf_t *fb, const render_ctx_t *c, game_t *g);
+
+/* The end-of-run screen: what you scored, then the board.  `highlight` is a
+ * row to pick out (-1 for none) and `edit_cell` is the initial being typed
+ * (0-2, or -1 when the score is not being entered). */
+typedef struct {
+    const char *headline;        /* GAME OVER / RETIRED / ABANDONED       */
+    const char *board_name;
+    int   final_score;
+    bool  ranked;                /* false prints NOT RANKED               */
+    const score_table_t *table;
+    int   highlight;
+    int   edit_cell;
+    bool  saved;                 /* false prints SCORES NOT SAVED         */
+    unsigned t;                  /* frame counter, for the caret blink    */
+} scoreboard_t;
+
+void render_scores(framebuf_t *fb, const render_ctx_t *c,
+                   const scoreboard_t *v);
 
 /* ---- primitives, also used by the HUD and title screens ---------------- */
 

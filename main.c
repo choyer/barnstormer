@@ -16,6 +16,7 @@
 #include "game.h"
 #include "platform.h"
 #include "render.h"
+#include "score.h"
 
 extern const int sw_title_menu_len;
 
@@ -23,7 +24,7 @@ extern const int sw_title_menu_len;
 #define BARNSTORMER_VERSION "unknown"
 #endif
 
-typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER } uistate_t;
+typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER, UI_ENTRY } uistate_t;
 
 /* SIGUSR1 asks for the keyboard back, for a keybind to fire at the game when
  * the overlay has been left deaf.  See platform_regrab(). */
@@ -92,7 +93,8 @@ static void usage(const char *argv0)
 "  space  guns     b  bomb        v  missile     c  flare\n"
 "  h  fly home     s  sound       p  pause       F2  window/overlay\n"
 "  r  restart the current game\n"
-"  Esc  end the run, then back to the menu, then quit\n",
+"  Esc  retire (parked at home) or abandon the run (in the air),\n"
+"       then back to the menu, then quit\n",
         argv0, MAX_GAME);
 }
 
@@ -186,6 +188,16 @@ int main(int argc, char **argv)
     bool running = true;
     bool deaf_pause = false;    /* paused because the keyboard was taken  */
 
+    scores_t scores;
+    scores_load(&scores);
+    score_table_t board;        /* what the end screen shows              */
+    char initials[SCORE_NAME_LEN + 1] = "AAA";
+    int  rank = -1;             /* row the run earned, -1 for none        */
+    int  cell = 0;              /* initial being edited                   */
+    int  final_score = 0;
+    bool saved = true;
+    unsigned over_t = 0;
+
     while (running && platform_poll(plat)) {
         double t = now_seconds();
         double dt = t - last;
@@ -214,6 +226,39 @@ int main(int argc, char **argv)
 
         int ev;
         while ((ev = platform_take_event(plat)) != SWKEY_NONE) {
+            if (ui == UI_ENTRY) {
+                if (ev == SWKEY_LEFT) {
+                    cell = (cell + SCORE_NAME_LEN - 1) % SCORE_NAME_LEN;
+                } else if (ev == SWKEY_RIGHT) {
+                    cell = (cell + 1) % SCORE_NAME_LEN;
+                } else if (ev == SWKEY_UP) {
+                    initials[cell] = score_char_cycle(initials[cell], 1);
+                } else if (ev == SWKEY_DOWN) {
+                    initials[cell] = score_char_cycle(initials[cell], -1);
+                } else if (ev == SWKEY_BACKSPACE) {
+                    if (cell > 0) cell--;
+                    initials[cell] = ' ';
+                } else if (SWKEY_IS_CHAR(ev)) {
+                    char ch = score_char_valid(SWKEY_CHAR(ev));
+                    if (ch) {
+                        initials[cell] = ch;
+                        if (cell < SCORE_NAME_LEN - 1)
+                            cell++;
+                    }
+                } else if (ev == SWKEY_ENTER || ev == SWKEY_QUIT) {
+                    /* Esc commits too: nobody should lose a high score to
+                     * the key they habitually press to get out of things. */
+                    rank = scores_insert(&scores, mode, initials, final_score);
+                    saved = scores_save(&scores);
+                    int b = score_board_of(mode);
+                    board = scores.board[b < 0 ? 0 : b];
+                    ui = UI_OVER;
+                }
+                if (ui == UI_ENTRY && rank >= 0)
+                    memcpy(board.e[rank].name, initials, SCORE_NAME_LEN);
+                continue;
+            }
+
             switch (ev) {
             /* Esc walks back out one step at a time -- run, then score,
              * then the title screen -- so quitting is always a deliberate
@@ -221,7 +266,6 @@ int main(int argc, char **argv)
             case SWKEY_QUIT:
                 if (ui == UI_PLAY || ui == UI_PAUSED) {
                     game_abandon(&game);
-                    ui = UI_OVER;
                 } else if (ui == UI_OVER) {
                     ui = UI_TITLE;
                 } else {
@@ -290,10 +334,8 @@ int main(int argc, char **argv)
                 keys[game.player] = platform_keys(plat);
                 game_tick(&game, keys);
                 tick_acc -= tick_dt;
-                if (game.over) {
-                    ui = UI_OVER;
+                if (game.over)
                     break;
-                }
             }
             while (snd_acc >= snd_dt) {
                 sw_sound_adj(&game);
@@ -301,6 +343,37 @@ int main(int argc, char **argv)
             }
         } else {
             tick_acc = snd_acc = 0.0;
+        }
+
+        /* A run can finish by crashing out, by retiring, or by bailing out;
+         * all three arrive here, and only the first two are offered a place
+         * on the board.
+         *
+         * Only a run we were still playing counts as newly finished.  Testing
+         * the state we are leaving rather than the ones we are going to is
+         * what lets Esc get off this screen: `game.over` stays true until the
+         * next game starts, so a looser test drags the title screen straight
+         * back here on the same frame. */
+        if (game.over && (ui == UI_PLAY || ui == UI_PAUSED)) {
+            int b = score_board_of(mode);
+            if (b < 0) b = 0;
+            final_score = game_player(&game)->score;
+            rank = game_ranked(&game)
+                       ? scores_rank(&scores, mode, final_score) : -1;
+            board = scores.board[b];
+            over_t = 0;
+
+            if (rank >= 0) {
+                memcpy(initials, scores.last_name, sizeof(initials));
+                cell = 0;
+                for (int i = SCORE_ROWS - 1; i > rank; i--)
+                    board.e[i] = board.e[i - 1];
+                memcpy(board.e[rank].name, initials, SCORE_NAME_LEN);
+                board.e[rank].score = final_score;
+                ui = UI_ENTRY;
+            } else {
+                ui = UI_OVER;
+            }
         }
 
         audio_tone(audio, (ui == UI_PLAY && game.sound_on)
@@ -337,9 +410,22 @@ int main(int argc, char **argv)
                 break;
             }
             case UI_OVER:
+            case UI_ENTRY: {
+                scoreboard_t v = {
+                    .headline    = game.over_msg ? game.over_msg : "GAME OVER",
+                    .board_name  = score_board_name(mode),
+                    .final_score = final_score,
+                    .ranked      = game_ranked(&game),
+                    .table       = &board,
+                    .highlight   = rank,
+                    .edit_cell   = ui == UI_ENTRY ? cell : -1,
+                    .saved       = saved,
+                    .t           = over_t++,
+                };
                 render_frame(fb, &ctx, &game);
-                render_gameover(fb, &ctx, &game);
+                render_scores(fb, &ctx, &v);
                 break;
+            }
             }
             if (dump_path && frames >= dump_after) {
                 dump_ppm(fb, dump_path);
