@@ -6,3 +6,4 @@ dist/
 packaging/pkg/
 packaging/src/
 *.pkg.tar.zst
+tools/mklisting.py
