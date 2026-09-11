@@ -1,4 +1,4 @@
-# Barnstormer 1.1.0
+# Barnstormer 1.2.0
 
 Sopwith re-implemented for Wayland: David L. Clark's 1984 biplane dogfight,
 in a window or flying as a transparent overlay across your desktop.
@@ -9,51 +9,40 @@ original sources rather than redrawn. The renderer is a software rasteriser;
 the only libraries linked are libwayland-client and libxkbcommon, plus ALSA
 for sound. No toolkit, no GL, no SDL.
 
-## Changes in 1.1.0
+## Changes in 1.2.0
 
-### High scores
+### The overlay no longer judders
 
-A local arcade leaderboard: ten entries a board, three initials each, and a
-board apiece for novice, single player and against the computer. A run in one
-mode is not comparable with a run in another -- single player is capped at
-2,175 a level, while the computer board has no ceiling at all -- so they are
-kept apart. Each board ships with built-in defaults, and every finished run
-shows you what you scored against the board it was measured on.
+The simulation advances 12.14 times a second, exactly as the original's did.
+On a 320x200 screen a 4-12 pixel step a tick was near invisible; magnified
+eight times onto a full-screen overlay it is 32-96 pixels, twelve times a
+second, against a perfectly still desktop. That reads as judder, and it was
+the single worst thing about breakout mode.
 
-Initials are entered the way a cabinet does it: three cells, A-Z and space,
-Up and Down to cycle, Left and Right to move, and a blinking caret on the
-cell you are on. Typing the letter works too, because this is a keyboard.
+The renderer now draws between those positions, offsetting each object from
+its simulated position by a fraction of a tick scaled by the velocity the
+simulation already carries. Nothing has to be remembered between ticks, and
+objects that spawn or teleport need no special case.
 
-Scores live in `$XDG_DATA_HOME/barnstormer/scores` (`~/.local/share` by
-default), written the moment an entry is committed, and survive updates --
-nothing the package installs writes to that directory. The file is plain
-text. If it goes missing the built-in defaults come back; if it is damaged it
-is moved aside rather than overwritten.
+Aircraft, scenery and the camera are offset half a tick either side, so the
+display's timing averages the original's exactly -- smoothness without trading
+judder for input lag. Shots, bombs and missiles are offset backwards instead,
+drawn between where they were and where they are: they die the instant they
+touch something, and drawing one ahead put it visibly through the wall that
+was about to stop it.
 
-### A run can now end
+`--no-smooth` turns it all off and draws only the positions the simulation
+produces, as the original did.
 
-Your fifth crash used to rebuild the world with the score silently reset to
-zero, so a run had no end and nothing to record. It now ends:
-
-| How it ends | Shows | Ranked? |
-|---|---|---|
-| Fifth crash | `GAME OVER` | yes |
-| `Esc` parked at your own airfield | `RETIRED` | yes |
-| `Esc` in the air | `ABANDONED` | no |
-
-Flying home and landing is how you bank a score without throwing the aircraft
-at the ground five times. Retiring is a deliberate press rather than automatic
-on touchdown, because landing is also how you refuel and rearm.
-
-This is a change to the simulation, not just the interface: the soak tests now
-report the difficulty they were started at instead of 0, because a death no
-longer resets the run.
+**The simulation is untouched.** It still advances 12.14 times a second, the
+physics and collisions are identical, the deterministic replay test hashes the
+same, and `--no-smooth` renders byte-identically to 1.1.0. Only where things
+are painted changed.
 
 ### Also
 
-`make test-ui` drives the real binary through every screen with synthetic key
-events, which is the only way to test a state machine that exists in response
-to real input.
+`packaging/install.sh` is now part of the repository rather than only existing
+inside a built tarball, so a release can be cut from a clean clone.
 
 ## Installing
 
@@ -65,11 +54,11 @@ git clone https://github.com/choyer/barnstormer
 cd barnstormer/packaging && makepkg -si
 ```
 
-**From the tarball** — `barnstormer-1.1.0-x86_64.tar.gz`:
+**From the tarball** — `barnstormer-1.2.0-x86_64.tar.gz`:
 
 ```bash
-tar xzf barnstormer-1.1.0-x86_64.tar.gz
-cd barnstormer-1.1.0-x86_64 && ./install.sh      # installs to ~/.local
+tar xzf barnstormer-1.2.0-x86_64.tar.gz
+cd barnstormer-1.2.0-x86_64 && ./install.sh      # installs to ~/.local
 ```
 
 **From source** — `make && make install PREFIX=$HOME/.local`.
@@ -126,7 +115,7 @@ without alsa-lib present simply has no sound.
 Without layer-shell the game still runs in a window; it prints a notice and
 falls back.
 
-Verify the download against `barnstormer-1.1.0-x86_64.tar.gz.sha256`.
+Verify the download against `barnstormer-1.2.0-x86_64.tar.gz.sha256`.
 
 ## Credits
 
