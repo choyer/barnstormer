@@ -1,4 +1,4 @@
-# Barnstormer 1.2.0
+# Barnstormer 1.3.0
 
 Sopwith re-implemented for Wayland: David L. Clark's 1984 biplane dogfight,
 in a window or flying as a transparent overlay across your desktop.
@@ -9,40 +9,35 @@ original sources rather than redrawn. The renderer is a software rasteriser;
 the only libraries linked are libwayland-client and libxkbcommon, plus ALSA
 for sound. No toolkit, no GL, no SDL.
 
-## Changes in 1.2.0
+## Changes in 1.3.0
 
-### The overlay no longer judders
+### Throttle and airspeed dials
 
-The simulation advances 12.14 times a second, exactly as the original's did.
-On a 320x200 screen a 4-12 pixel step a tick was near invisible; magnified
-eight times onto a full-screen overlay it is 32-96 pixels, twelve times a
-second, against a perfectly still desktop. That reads as judder, and it was
-the single worst thing about breakout mode.
+Press `d` for a strip above the panel showing what the throttle is set to and
+what the aircraft has actually got. It is off by default and the setting is
+remembered between runs.
 
-The renderer now draws between those positions, offsetting each object from
-its simulated position by a fraction of a tick scaled by the velocity the
-simulation already carries. Nothing has to be remembered between ticks, and
-objects that spawn or teleport need no special case.
+The throttle is five positions but only four units of thrust above the
+minimum, so it reads as four pips: none lit is idle, all four is full. The
+airspeed bar beneath it carries three things at once -- the fill is the
+current airspeed, the bright tick is the speed the throttle asked for, and the
+shaded region is below the stall floor. The gap between the fill and the tick
+is the throttle lag, which closes one step every fourth tick; the fill turns
+red once it drops into the shaded part, which is the stall arriving with about
+a second of warning.
 
-Aircraft, scenery and the camera are offset half a tick either side, so the
-display's timing averages the original's exactly -- smoothness without trading
-judder for input lag. Shots, bombs and missiles are offset backwards instead,
-drawn between where they were and where they are: they die the instant they
-touch something, and drawing one ahead put it visibly through the wall that
-was about to stop it.
+None of that information is new. It was always in the simulation and simply
+had no way of being seen, which is why the flight model has always been
+harder to read than to fly. The stall shading is hidden in novice mode, which
+cannot stall at all.
 
-`--no-smooth` turns it all off and draws only the positions the simulation
-produces, as the original did.
+### A more legible title screen
 
-**The simulation is untouched.** It still advances 12.14 times a second, the
-physics and collisions are identical, the deterministic replay test hashes the
-same, and `--no-smooth` renders byte-identically to 1.1.0. Only where things
-are painted changed.
-
-### Also
-
-`packaging/install.sh` is now part of the repository rather than only existing
-inside a built tarball, so a release can be cut from a clean clone.
+The control list now draws each key in white against its action in grey, laid
+out on columns measured from the keys themselves rather than a fixed width, so
+nothing is stranded halfway across the screen from what it does. The block is
+a quarter narrower as a result, which leaves the rest of the title screen
+larger on a small window.
 
 ## Installing
 
@@ -54,11 +49,11 @@ git clone https://github.com/choyer/barnstormer
 cd barnstormer/packaging && makepkg -si
 ```
 
-**From the tarball** — `barnstormer-1.2.0-x86_64.tar.gz`:
+**From the tarball** — `barnstormer-1.3.0-x86_64.tar.gz`:
 
 ```bash
-tar xzf barnstormer-1.2.0-x86_64.tar.gz
-cd barnstormer-1.2.0-x86_64 && ./install.sh      # installs to ~/.local
+tar xzf barnstormer-1.3.0-x86_64.tar.gz
+cd barnstormer-1.3.0-x86_64 && ./install.sh      # installs to ~/.local
 ```
 
 **From source** — `make && make install PREFIX=$HOME/.local`.
@@ -115,7 +110,7 @@ without alsa-lib present simply has no sound.
 Without layer-shell the game still runs in a window; it prints a notice and
 falls back.
 
-Verify the download against `barnstormer-1.2.0-x86_64.tar.gz.sha256`.
+Verify the download against `barnstormer-1.3.0-x86_64.tar.gz.sha256`.
 
 ## Credits
 
