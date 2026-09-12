@@ -45,6 +45,7 @@ enum {
     SWKEY_LEFT,
     SWKEY_RIGHT,
     SWKEY_BACKSPACE,
+    SWKEY_DIALS,   /* show/hide the throttle and airspeed strip           */
 
     /* Typed characters ride the same queue: a letter or space arrives as
      * SWKEY_CHAR_BASE + the uppercase character, alongside (not instead of)

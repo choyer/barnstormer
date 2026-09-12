@@ -35,6 +35,7 @@ void render_layout(render_ctx_t *c, render_style_t style, int fb_w, int fb_h)
     c->solid = (style == RENDER_BREAKOUT);
     c->lead_ticks = 0.0;        /* exactly as simulated, until asked */
     c->trail_ticks = 0.0;
+    c->dials = false;
 }
 
 /* Where something is `ticks` of a tick from its simulated position, given its
@@ -293,6 +294,86 @@ static void draw_radar(framebuf_t *fb, const render_ctx_t *c, game_t *g,
     fb_rect(fb, vx + vw - 1, y, 1, h, sw_palette[PAL_HUD]);
 }
 
+/*
+ * The throttle and airspeed strip, sitting flush on top of the panel.
+ *
+ * Throttle is five discrete detents; airspeed is a continuous thing that
+ * chases a target the throttle only partly sets, one step every fourth tick.
+ * Showing both is what makes the flight model legible: the bug marks what the
+ * lever asked for, the fill shows what the aircraft has actually got, and the
+ * gap between them is the lag and the pitch working against each other.
+ *
+ * The shaded region is below the stall floor -- fall in there and the aircraft
+ * departs.  It is hidden in novice mode, which cannot stall at all.
+ */
+static void draw_dials(framebuf_t *fb, const render_ctx_t *c, game_t *g,
+                       int ts, int pad, int y0)
+{
+    const object_t *p = game_player(g);
+    int barh = 5 * ts;
+    int bw = 60 * ts;
+    int lx = pad;                       /* label column, as the gauges use */
+    int bx = lx + 5 * 6 * ts;           /* bar column, ditto               */
+    int spd_y = y0 - 6 * ts - barh;     /* floating just above the panel   */
+    int thr_y = spd_y - 9 * ts;
+
+    uint32_t mine = sw_palette[PAL_TEAM1];
+    uint32_t warn = sw_palette[PAL_TEAM2];
+
+    /* ---- throttle: one pip per unit of thrust above the minimum ----
+     *
+     * The lever has five positions, 0 to MAX_THROTTLE, but that is five
+     * *values* and only four units: idle is no pips lit, full throttle is all
+     * of them.  Drawing five cells leaves the last one permanently dark. */
+    fb_text(fb, lx, thr_y, ts, sw_palette[PAL_HUD_DIM], "THR");
+    int gap = 2 * ts;
+    int pipw = (bw - (MAX_THROTTLE - 1) * gap) / MAX_THROTTLE;
+    for (int i = 0; i < MAX_THROTTLE; i++) {
+        int px = bx + i * (pipw + gap);
+        if (i < p->accel)
+            fb_rect(fb, px, thr_y, pipw, barh, mine);
+        else
+            fb_blend_rect(fb, px, thr_y, pipw, barh, 0x40FFFFFF);
+    }
+
+    /* ---- airspeed: where it is, where it was asked to be, where it dies ---- */
+    fb_text(fb, lx, spd_y, ts, sw_palette[PAL_HUD_DIM], "SPD");
+
+    int span = g->gminspeed + 8;        /* a full-throttle dive, near enough */
+    if (span < 1)
+        span = 1;
+    fb_blend_rect(fb, bx, spd_y, bw, barh, 0x40FFFFFF);
+
+    int spd = p->speed;
+    if (spd < 0) spd = 0;
+    if (spd > span) spd = span;
+    int fill = spd * bw / span;
+    if (fill > 0)
+        fb_rect(fb, bx, spd_y, fill, barh,
+                (g->mode != PLAY_NOVICE && p->speed < g->gminspeed) ? warn : mine);
+
+    /* The stall floor goes on top of the fill, not under it.  Underneath, it
+     * disappears the moment you are flying fast enough to cover it -- which
+     * is exactly when it is worth seeing, because the whole point is watching
+     * the airspeed come down towards it. */
+    if (g->mode != PLAY_NOVICE) {
+        int stall = g->gminspeed * bw / span;
+        if (stall > 0)
+            fb_blend_rect(fb, bx, spd_y, stall, barh,
+                          0x66000000u | (warn & 0x00FFFFFFu));
+    }
+
+    /* The bug marks what the lever asked for, not where pitch is dragging
+     * the aircraft: that part is the fill moving towards or away from it. */
+    int want = g->gminspeed + p->accel;
+    if (want > span)
+        want = span;
+    int wx = bx + want * bw / span;
+    int tickw = ts < 1 ? 1 : ts;
+    fb_rect(fb, wx - tickw / 2, spd_y - 2 * ts, tickw, barh + 4 * ts,
+            sw_palette[PAL_HUD]);
+}
+
 static void draw_hud(framebuf_t *fb, const render_ctx_t *c, game_t *g,
                      int left)
 {
@@ -321,6 +402,9 @@ static void draw_hud(framebuf_t *fb, const render_ctx_t *c, game_t *g,
     else
         fb_blend_rect(fb, 0, y0, fb->w, band, 0x90000000);
     fb_rect(fb, 0, y0, fb->w, 1, sw_palette[PAL_HUD_DIM]);
+
+    if (c->dials)
+        draw_dials(fb, c, g, ts, pad, y0);
 
     int barw = 30 * ts;
     int barh = 5 * ts;
@@ -468,12 +552,56 @@ const int sw_title_menu_len = 3;
 
 /* Lay the title out as a centred stack so it sits correctly whatever shape
  * of window (or whole screen) it lands in. */
+/* A key and what it does, for the title screen's control block.  They are
+ * kept as pairs rather than as one string so the key can be drawn bright and
+ * the action dim: on a list this long, the keys are what the eye is hunting
+ * for, and giving them the contrast makes the block scannable. */
 typedef struct {
-    const char *text;
+    const char *key;
+    const char *act;
+} control_t;
+
+#define CTL_COLS   3
+#define CTL_ROWS   5
+#define CTL_GAP    3        /* blank characters between columns             */
+
+typedef struct {
+    const char *text;   /* NULL when this row is CTL_COLS control pairs    */
+    const control_t *ctl;
     int scale;          /* multiples of the base text size                */
     int pal;
     int gap;            /* extra space below, in base text units          */
 } title_line_t;
+
+/* Column widths are measured from the keys and actions actually in each
+ * column rather than fixed, so a one-character key is not left stranded
+ * five spaces from what it does.  Returns the block width in characters. */
+static int ctl_layout(int keyw[CTL_COLS], int xoff[CTL_COLS]);
+
+static const control_t sw_controls[] = {
+    { ",",     "PULL UP"  }, { "/",  "DIVE"    }, { ".",   "FLIP"    },
+    { "X",     "FASTER"   }, { "Z",  "SLOWER"  }, { "SPACE", "GUNS"  },
+    { "B",     "BOMB"     }, { "V",  "MISSILE" }, { "C",   "FLARE"   },
+    { "H",     "HOME"     }, { "S",  "SOUND"   }, { "P",   "PAUSE"   },
+    { "D",     "DIALS"    }, { "F2", "VIEW"    }, { "ESC", "END RUN" },
+};
+
+static int ctl_layout(int keyw[CTL_COLS], int xoff[CTL_COLS])
+{
+    int x = 0;
+    for (int c = 0; c < CTL_COLS; c++) {
+        size_t k = 0, a = 0;
+        for (int r = 0; r < CTL_ROWS; r++) {
+            const control_t *e = &sw_controls[r * CTL_COLS + c];
+            if (strlen(e->key) > k) k = strlen(e->key);
+            if (strlen(e->act) > a) a = strlen(e->act);
+        }
+        keyw[c] = (int)k + 1;                  /* one space after the key */
+        xoff[c] = x;
+        x += keyw[c] + (int)a + (c < CTL_COLS - 1 ? CTL_GAP : 0);
+    }
+    return x;
+}
 
 void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
                   int menu_sel)
@@ -490,20 +618,21 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
                  i == menu_sel ? "> " : "  ", title_menu[i]);
 
     title_line_t lines[] = {
-        { "SOPWITH",                                4, PAL_TEAM1,   0 },
-        { "BARNSTORMER",                            3, PAL_TITLE2,  2 },
-        { "(C) COPYRIGHT 1984-2000 DAVID L. CLARK", 1, PAL_HUD_DIM, 0 },
-        { "WAYLAND IMPLEMENTATION 2026 CARL HOYER", 1, PAL_HUD_DIM, 3 },
-        { menu[0], 2, menu_sel == 0 ? PAL_HUD : PAL_HUD_DIM, 0 },
-        { menu[1], 2, menu_sel == 1 ? PAL_HUD : PAL_HUD_DIM, 0 },
-        { menu[2], 2, menu_sel == 2 ? PAL_HUD : PAL_HUD_DIM, 3 },
-        { ",  PULL UP      /  DIVE        .  FLIP",  1, PAL_HUD_DIM, 0 },
-        { "X  FASTER       Z  SLOWER   SPACE GUNS",  1, PAL_HUD_DIM, 0 },
-        { "B  BOMB         V  MISSILE     C FLARE",  1, PAL_HUD_DIM, 0 },
-        { "H  FLY HOME     S  SOUND       P PAUSE",  1, PAL_HUD_DIM, 0 },
-        { "F2 WINDOW / OVERLAY       ESC  END RUN",  1, PAL_HUD_DIM, 0 },
-        { "ESC FROM THIS SCREEN QUITS",              1, PAL_HUD_DIM, 3 },
-        { "PRESS ENTER TO FLY",                      2, PAL_TEAM1,   0 },
+        { "SOPWITH",                          NULL, 4, PAL_TEAM1,   0 },
+        { "BARNSTORMER",                      NULL, 3, PAL_TITLE2,  2 },
+        { "(C) COPYRIGHT 1984-2000 DAVID L. CLARK", NULL,
+                                                    1, PAL_HUD_DIM, 0 },
+        { "WAYLAND IMPLEMENTATION 2026 CARL HOYER", NULL,
+                                                    1, PAL_HUD_DIM, 3 },
+        { menu[0], NULL, 2, menu_sel == 0 ? PAL_HUD : PAL_HUD_DIM, 0 },
+        { menu[1], NULL, 2, menu_sel == 1 ? PAL_HUD : PAL_HUD_DIM, 0 },
+        { menu[2], NULL, 2, menu_sel == 2 ? PAL_HUD : PAL_HUD_DIM, 3 },
+        { NULL, &sw_controls[0],  1, PAL_HUD_DIM, 0 },
+        { NULL, &sw_controls[3],  1, PAL_HUD_DIM, 0 },
+        { NULL, &sw_controls[6],  1, PAL_HUD_DIM, 0 },
+        { NULL, &sw_controls[9],  1, PAL_HUD_DIM, 0 },
+        { NULL, &sw_controls[12], 1, PAL_HUD_DIM, 3 },
+        { "PRESS ENTER TO FLY",               NULL, 2, PAL_TEAM1,   0 },
     };
     const int n = (int)(sizeof(lines) / sizeof(lines[0]));
     const int nblink = 1;      /* trailing lines that blink               */
@@ -516,7 +645,10 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
         widest = 0;
         for (int i = 0; i < n; i++) {
             total += (7 + 3 + lines[i].gap * 3) * ts * lines[i].scale;
-            int w = fb_text_width(ts * lines[i].scale, lines[i].text);
+            int sc = ts * lines[i].scale;
+            int kw[CTL_COLS], xo[CTL_COLS];
+            int w = lines[i].ctl ? ctl_layout(kw, xo) * 6 * sc
+                                 : fb_text_width(sc, lines[i].text);
             if (w > widest)
                 widest = w;
         }
@@ -562,9 +694,25 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
     for (int i = 0; i < n; i++) {
         int sc = ts * lines[i].scale;
         bool blink = (i >= n - nblink);
-        if (!blink || ((t / 24) & 1))
+        if (lines[i].ctl) {
+            /* Key bright, action dim: the keys are what the eye hunts for. */
+            int kw[CTL_COLS], xo[CTL_COLS];
+            int x = cx - ctl_layout(kw, xo) * 6 * sc / 2;
+            for (int col = 0; col < CTL_COLS; col++) {
+                const control_t *k = &lines[i].ctl[col];
+                int kx = x + xo[col] * 6 * sc;
+                /* Keys sit right against their action: the field is as wide
+                 * as the longest key in the column, so short ones are pushed
+                 * to its right rather than left stranded beside it. */
+                int pad_k = (kw[col] - 1 - (int)strlen(k->key)) * 6 * sc;
+                fb_text(fb, kx + pad_k, y, sc, sw_palette[PAL_HUD], k->key);
+                fb_text(fb, kx + kw[col] * 6 * sc, y, sc,
+                        sw_palette[PAL_HUD_DIM], k->act);
+            }
+        } else if (!blink || ((t / 24) & 1)) {
             fb_text(fb, cx - fb_text_width(sc, lines[i].text) / 2, y, sc,
                     sw_palette[lines[i].pal], lines[i].text);
+        }
         y += (7 + 3 + lines[i].gap * 3) * sc;
     }
 }
@@ -621,28 +769,37 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
 
     title_line_t lines[SCORE_ROWS + 6];
     int n = 0;
-    lines[n++] = (title_line_t){ v->headline, 3, PAL_TEAM2, 1 };
-    lines[n++] = (title_line_t){ scoreline, 2, PAL_HUD, 0 };
+    /* Named fields throughout: this struct is shared with the title screen
+     * and gained a member once already. */
+    lines[n++] = (title_line_t){ .text = v->headline, .scale = 3,
+                                 .pal = PAL_TEAM2, .gap = 1 };
+    lines[n++] = (title_line_t){ .text = scoreline, .scale = 2,
+                                 .pal = PAL_HUD, .gap = 0 };
     if (!v->ranked)
-        lines[n++] = (title_line_t){ "NOT RANKED", 1, PAL_HUD_DIM, 0 };
-    lines[n++] = (title_line_t){ heading, 1, PAL_TITLE2, 2 };
+        lines[n++] = (title_line_t){ .text = "NOT RANKED", .scale = 1,
+                                     .pal = PAL_HUD_DIM, .gap = 0 };
+    lines[n++] = (title_line_t){ .text = heading, .scale = 1,
+                                 .pal = PAL_TITLE2, .gap = 2 };
 
     int first_row = n;
     for (int i = 0; i < SCORE_ROWS; i++)
         lines[n++] = (title_line_t){
-            rows[i], 2,
-            i == v->highlight ? PAL_TEAM1 : PAL_HUD_DIM,
-            i == SCORE_ROWS - 1 ? 2 : 0,
+            .text = rows[i], .scale = 2,
+            .pal = i == v->highlight ? PAL_TEAM1 : PAL_HUD_DIM,
+            .gap = i == SCORE_ROWS - 1 ? 2 : 0,
         };
 
     if (v->edit_cell >= 0)
         lines[n++] = (title_line_t){
-            "UP DOWN LETTER PICKS    ENTER WHEN DONE", 1, PAL_HUD, 0 };
+            .text = "UP DOWN LETTER PICKS    ENTER WHEN DONE",
+            .scale = 1, .pal = PAL_HUD, .gap = 0 };
     else
         lines[n++] = (title_line_t){
-            "ENTER TO PLAY AGAIN    ESC FOR MENU", 1, PAL_HUD_DIM, 0 };
+            .text = "ENTER TO PLAY AGAIN    ESC FOR MENU",
+            .scale = 1, .pal = PAL_HUD_DIM, .gap = 0 };
     if (!v->saved)
-        lines[n++] = (title_line_t){ "SCORES NOT SAVED", 1, PAL_TEAM2, 0 };
+        lines[n++] = (title_line_t){ .text = "SCORES NOT SAVED", .scale = 1,
+                                     .pal = PAL_TEAM2, .gap = 0 };
 
     int total = 0, widest = 0;
     for (;;) {
@@ -650,7 +807,10 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
         widest = 0;
         for (int i = 0; i < n; i++) {
             total += (7 + 3 + lines[i].gap * 3) * ts * lines[i].scale;
-            int w = fb_text_width(ts * lines[i].scale, lines[i].text);
+            int sc = ts * lines[i].scale;
+            int kw[CTL_COLS], xo[CTL_COLS];
+            int w = lines[i].ctl ? ctl_layout(kw, xo) * 6 * sc
+                                 : fb_text_width(sc, lines[i].text);
             if (w > widest)
                 widest = w;
         }

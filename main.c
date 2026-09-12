@@ -94,6 +94,7 @@ static void usage(const char *argv0)
 "  x  throttle up  z  throttle down\n"
 "  space  guns     b  bomb        v  missile     c  flare\n"
 "  h  fly home     s  sound       p  pause       F2  window/overlay\n"
+"  d  throttle and airspeed dials (remembered between runs)\n"
 "  r  restart the current game\n"
 "  Esc  retire (parked at home) or abandon the run (in the air),\n"
 "       then back to the menu, then quit\n",
@@ -195,6 +196,7 @@ int main(int argc, char **argv)
 
     scores_t scores;
     scores_load(&scores);
+    bool dials = scores.dials;  /* remembered between runs                */
     score_table_t board;        /* what the end screen shows              */
     char initials[SCORE_NAME_LEN + 1] = "AAA";
     int  rank = -1;             /* row the run earned, -1 for none        */
@@ -289,6 +291,14 @@ int main(int argc, char **argv)
 
             case SWKEY_SOUND:
                 game.sound_on = !game.sound_on;
+                break;
+
+            case SWKEY_DIALS:
+                /* Written out as soon as it changes: there is no exit hook
+                 * to save it in, and the file is tiny. */
+                dials = !dials;
+                scores.dials = dials;
+                scores_save(&scores);
                 break;
 
             case SWKEY_PAUSE:
@@ -389,6 +399,7 @@ int main(int argc, char **argv)
         if (fb) {
             render_ctx_t ctx;
             render_layout(&ctx, platform_style(plat), fb->w, fb->h);
+            ctx.dials = dials;
 
             /* Where this frame sits inside the tick still being accumulated,
              * centred so the display runs half a tick early at most and half

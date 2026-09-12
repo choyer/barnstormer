@@ -73,6 +73,7 @@ barnstormer --help
 | `c`       | flare — decoys an incoming missile           |
 | `h`       | fly home and land                            |
 | `s`       | sound on/off                                 |
+| `d`       | throttle and airspeed dials (remembered)     |
 | `p`       | pause                                        |
 | `r`       | restart the current game                     |
 | `F2`      | switch between window and overlay            |

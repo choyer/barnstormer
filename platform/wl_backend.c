@@ -317,6 +317,7 @@ static int keysym_to_event(xkb_keysym_t sym)
     case XKB_KEY_Left:  case XKB_KEY_KP_Left:   return SWKEY_LEFT;
     case XKB_KEY_Right: case XKB_KEY_KP_Right:  return SWKEY_RIGHT;
     case XKB_KEY_BackSpace:               return SWKEY_BACKSPACE;
+    case XKB_KEY_d: case XKB_KEY_D:       return SWKEY_DIALS;
     case XKB_KEY_Up:                      return SWKEY_UP;
     case XKB_KEY_Down:                    return SWKEY_DOWN;
     case XKB_KEY_r: case XKB_KEY_R:       return SWKEY_RESTART;

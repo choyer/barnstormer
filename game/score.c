@@ -215,6 +215,7 @@ static void load_defaults(scores_t *s)
 {
     memcpy(s->board, defaults, sizeof(s->board));
     set_name(s->last_name, "AAA");
+    s->dials = false;                 /* off until the player asks for it */
     s->loaded_defaults = true;
 }
 
@@ -288,6 +289,11 @@ void scores_load(scores_t *s)
             continue;
         }
 
+        if (!strncmp(line, "DIALS ", 6)) {
+            s->dials = line[6] == '1';
+            continue;
+        }
+
         int b, sc;
         char name[SCORE_NAME_LEN + 1];
         if (!parse_entry(line, &b, name, &sc))
@@ -324,6 +330,7 @@ bool scores_save(const scores_t *s)
 
     fprintf(f, "%s\n", SCORE_HEADER);
     fprintf(f, "LAST %s\n", s->last_name);
+    fprintf(f, "DIALS %d\n", s->dials ? 1 : 0);
     for (int b = 0; b < SCORE_BOARDS; b++)
         for (int i = 0; i < SCORE_ROWS; i++)
             fprintf(f, "%s %s %d\n", board_tag[b],

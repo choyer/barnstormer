@@ -29,6 +29,7 @@ typedef struct {
 typedef struct {
     score_table_t board[SCORE_BOARDS];
     char last_name[SCORE_NAME_LEN + 1];  /* pre-filled on the next entry  */
+    bool dials;                          /* the throttle/airspeed strip   */
     bool loaded_defaults;                /* nothing on disk yet           */
 } scores_t;
 

@@ -44,6 +44,8 @@ typedef struct {
      * has already been -- never past the wall that is about to stop them.
      * Also zero-by-default, for the same reason as above. */
     double trail_ticks;
+
+    bool dials;            /* draw the throttle/airspeed strip      */
     int scale;             /* integer world-pixel magnification            */
     int ox, oy;            /* framebuffer offset of world pixel (0,0)      */
     int view_w, view_h;    /* visible world pixels                         */

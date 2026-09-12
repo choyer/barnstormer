@@ -135,6 +135,19 @@ int main(void)
     ok("a space inside a name round-trips",
        !strcmp(spaced.board[0].e[0].name, "A B"));
 
+    /* ---- the dials setting rides along ---- */
+    scores_load(&s);
+    ok("dials default to off", !s.dials);
+    s.dials = true;
+    ok("saving with dials on", scores_save(&s));
+    scores_t d;
+    scores_load(&d);
+    ok("dials survive a reload", d.dials);
+    d.dials = false;
+    scores_save(&d);
+    scores_load(&d);
+    ok("and turning them off survives too", !d.dials);
+
     /* ---- corrupt file ---- */
     write_file("", "this is not a score file at all\n");
     scores_load(&s);
