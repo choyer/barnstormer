@@ -26,7 +26,7 @@ extern const int sw_title_menu_len;
 #endif
 
 typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER, UI_ENTRY,
-               UI_EDIT } uistate_t;
+               UI_EDIT, UI_LEVELS } uistate_t;
 
 /* SIGUSR1 asks for the keyboard back, for a keybind to fire at the game when
  * the overlay has been left deaf.  See platform_regrab(). */
@@ -235,6 +235,12 @@ int main(int argc, char **argv)
     bool flying = false;          /* test flight launched from the editor */
     bool leave_armed = false;     /* Esc pressed once with work unsaved   */
     unsigned edit_t = 0;          /* paces the held-key editing keys      */
+
+    /* The level directory, read when the picker is opened rather than at
+     * startup: levels arrive while the game is running, from the editor a
+     * Tab away or from a file manager. */
+    level_info_t levels[LEVEL_LIST_MAX];
+    int n_levels = 0, levels_skipped = 0, level_sel = 0;
     int menu_sel = (mode == PLAY_NOVICE) ? 0 : (mode == PLAY_SINGLE ? 1 : 2);
     unsigned title_t = 0;
 
@@ -318,6 +324,40 @@ int main(int argc, char **argv)
                     }
                 }
                 leave_armed = false;
+                continue;
+            }
+
+            if (ui == UI_LEVELS) {
+                if (ev == SWKEY_UP) {
+                    level_sel = (level_sel + n_levels) % (n_levels + 1);
+                } else if (ev == SWKEY_DOWN) {
+                    level_sel = (level_sel + 1) % (n_levels + 1);
+                } else if (ev == SWKEY_QUIT) {
+                    ui = UI_TITLE;
+                } else if (ev == SWKEY_ENTER) {
+                    if (level_sel == 0) {
+                        level_free(custom);
+                        custom = NULL;
+                        level = &level_classic;
+                        ui = UI_TITLE;
+                    } else {
+                        level_t *picked = NULL;
+                        if (level_load(levels[level_sel - 1].path,
+                                       &picked) == 0) {
+                            level_free(custom);
+                            custom = picked;
+                            level = custom;
+                            ui = UI_TITLE;
+                        } else {
+                            /* It listed a moment ago, so something has
+                             * happened to it since.  Show the list again. */
+                            n_levels = level_list(levels, LEVEL_LIST_MAX,
+                                                  &levels_skipped);
+                            if (level_sel > n_levels)
+                                level_sel = n_levels;
+                        }
+                    }
+                }
                 continue;
             }
 
@@ -420,7 +460,15 @@ int main(int argc, char **argv)
                 break;
 
             case SWKEY_ENTER:
-                if (ui == UI_TITLE) {
+                if (ui == UI_TITLE && menu_sel == 3) {
+                    n_levels = level_list(levels, LEVEL_LIST_MAX,
+                                          &levels_skipped);
+                    level_sel = 0;
+                    for (int i = 0; i < n_levels; i++)
+                        if (custom && !strcmp(levels[i].name, custom->name))
+                            level_sel = i + 1;
+                    ui = UI_LEVELS;
+                } else if (ui == UI_TITLE) {
                     mode = (menu_sel == 0) ? PLAY_NOVICE
                          : (menu_sel == 1) ? PLAY_SINGLE : PLAY_COMPUTER;
                     game_start(&game, level, mode, gamenum);
@@ -542,8 +590,21 @@ int main(int argc, char **argv)
 
             switch (ui) {
             case UI_TITLE:
-                render_title(fb, &ctx, title_t++, menu_sel);
+                render_title(fb, &ctx, title_t++, menu_sel,
+                             custom ? custom->name : NULL);
                 break;
+            case UI_LEVELS: {
+                char dir[512];
+                levelpick_t v = {
+                    .items   = levels,
+                    .n       = n_levels,
+                    .sel     = level_sel,
+                    .skipped = levels_skipped,
+                    .dir     = level_dir(dir, sizeof(dir)) ? dir : NULL,
+                };
+                render_levels(fb, &ctx, &v);
+                break;
+            }
             case UI_PLAY:
                 render_frame(fb, &ctx, &game);
                 break;

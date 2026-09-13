@@ -547,8 +547,9 @@ static const char *const title_menu[] = {
     "NOVICE PILOT",
     "SINGLE PLAYER",
     "AGAINST THE COMPUTER",
+    NULL,            /* the level row, written per frame from its name */
 };
-const int sw_title_menu_len = 3;
+const int sw_title_menu_len = 4;
 
 /* Lay the title out as a centred stack so it sits correctly whatever shape
  * of window (or whole screen) it lands in. */
@@ -604,7 +605,7 @@ static int ctl_layout(int keyw[CTL_COLS], int xoff[CTL_COLS])
 }
 
 void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
-                  int menu_sel)
+                  int menu_sel, const char *level_name)
 {
     draw_sky(fb, c);
 
@@ -612,10 +613,16 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
     if (ts < 1) ts = 1;
     if (ts > 4) ts = 4;
 
-    char menu[3][40];
+    /* The last row says which world the three above it will be flown on. */
+    char level_row[40];
+    snprintf(level_row, sizeof(level_row), "LEVEL: %.22s",
+             level_name ? level_name : "THE CLASSIC MAP");
+
+    char menu[4][48];
     for (int i = 0; i < sw_title_menu_len; i++)
         snprintf(menu[i], sizeof(menu[i]), "%s%s",
-                 i == menu_sel ? "> " : "  ", title_menu[i]);
+                 i == menu_sel ? "> " : "  ",
+                 title_menu[i] ? title_menu[i] : level_row);
 
     title_line_t lines[] = {
         { "SOPWITH",                          NULL, 4, PAL_TEAM1,   0 },
@@ -626,7 +633,8 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
                                                     1, PAL_HUD_DIM, 3 },
         { menu[0], NULL, 2, menu_sel == 0 ? PAL_HUD : PAL_HUD_DIM, 0 },
         { menu[1], NULL, 2, menu_sel == 1 ? PAL_HUD : PAL_HUD_DIM, 0 },
-        { menu[2], NULL, 2, menu_sel == 2 ? PAL_HUD : PAL_HUD_DIM, 3 },
+        { menu[2], NULL, 2, menu_sel == 2 ? PAL_HUD : PAL_HUD_DIM, 1 },
+        { menu[3], NULL, 2, menu_sel == 3 ? PAL_HUD : PAL_TITLE2,   3 },
         { NULL, &sw_controls[0],  1, PAL_HUD_DIM, 0 },
         { NULL, &sw_controls[3],  1, PAL_HUD_DIM, 0 },
         { NULL, &sw_controls[6],  1, PAL_HUD_DIM, 0 },
@@ -1092,4 +1100,119 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
         fb_text(fb, mx, gy + 2 * rowh, hs, sw_palette[PAL_HUD_DIM],
                 "ARROWS MOVE/RAISE  [ ] BRUSH  W WRITE  TAB FLY  ESC LEAVE");
     }
+}
+
+/* ---- choosing a level -------------------------------------------------- */
+
+void render_levels(framebuf_t *fb, const render_ctx_t *c,
+                   const levelpick_t *v)
+{
+    draw_sky(fb, c);
+
+    /* Eight rows at a time, scrolled to keep the chosen one in view: a level
+     * directory can be longer than a screen. */
+    const int window = 8;
+    int rows = v->n + 1;                    /* the classic map, then them  */
+    int first = v->sel - window / 2;
+    if (first > rows - window) first = rows - window;
+    if (first < 0) first = 0;
+    int last = first + window;
+    if (last > rows) last = rows;
+
+    /* Build the rows first, so the layout can be measured against the real
+     * text rather than against a guess at how long a level name is. */
+    char row[window][40];
+    const char *author[window];
+    int n_rows = 0;
+    for (int i = first; i < last; i++, n_rows++) {
+        if (i == 0)
+            snprintf(row[n_rows], sizeof(row[0]), "%sTHE CLASSIC MAP",
+                     v->sel == 0 ? "> " : "  ");
+        else
+            snprintf(row[n_rows], sizeof(row[0]), "%s%.30s",
+                     v->sel == i ? "> " : "  ", v->items[i - 1].name);
+        author[n_rows] = i > 0 && v->items[i - 1].author[0]
+                             ? v->items[i - 1].author : NULL;
+    }
+
+    const char *head = "CHOOSE A LEVEL";
+    const char *foot = "ENTER CHOOSES    ESC GOES BACK";
+    char note[80] = "", where[600] = "", how[80] = "";
+    if (v->skipped > 0)
+        snprintf(note, sizeof(note), "%d FILE%s HERE WILL NOT LOAD",
+                 v->skipped, v->skipped == 1 ? "" : "S");
+    if (v->n == 0) {
+        snprintf(where, sizeof(where), "PUT THEM IN %s", v->dir ? v->dir : "?");
+        snprintf(how, sizeof(how), "OR MAKE ONE:  barnstormer --edit NAME.lvl");
+    }
+
+    /* Shrink until it all fits, the way the title screen does. */
+    int ts = c->scale;
+    if (ts < 1) ts = 1;
+    if (ts > 4) ts = 4;
+    int rowh, total, widest;
+    for (;;) {
+        rowh = 13 * ts * 2;
+        total = 10 * ts * 3 + 6 * ts + n_rows * rowh + 12 * ts + 14 * ts * 2;
+        widest = fb_text_width(ts * 3, head);
+        int fw = fb_text_width(ts * 2, foot);
+        if (fw > widest) widest = fw;
+        for (int i = 0; i < n_rows; i++) {
+            int w = fb_text_width(ts * 2, row[i]);
+            if (w > widest) widest = w;
+        }
+        if (where[0]) {
+            int w = fb_text_width(ts, where);
+            if (w > widest) widest = w;
+        }
+        if (ts <= 1)
+            break;
+        if (total + 40 * ts <= fb->h && widest + 16 * ts <= fb->w)
+            break;
+        ts--;
+    }
+
+    int y = (fb->h - total) / 2;
+    if (y < 20 * ts)
+        y = 20 * ts;
+    int cx = fb->w / 2;
+
+    if (c->style == RENDER_BREAKOUT)
+        fb_blend_rect(fb, cx - widest / 2 - 8 * ts, y - 8 * ts,
+                      widest + 16 * ts, total + 16 * ts,
+                      sw_palette[PAL_HUD_BG]);
+
+    fb_text(fb, cx - fb_text_width(ts * 3, head) / 2, y, ts * 3,
+            sw_palette[PAL_TEAM1], head);
+    y += 10 * ts * 3 + 6 * ts;
+
+    for (int i = 0; i < n_rows; i++) {
+        fb_text(fb, cx - fb_text_width(ts * 2, row[i]) / 2, y, ts * 2,
+                sw_palette[first + i == v->sel ? PAL_HUD : PAL_HUD_DIM],
+                row[i]);
+        if (author[i]) {
+            char by[48];
+            snprintf(by, sizeof(by), "BY %.28s", author[i]);
+            fb_text(fb, cx - fb_text_width(ts, by) / 2, y + 8 * ts * 2, ts,
+                    sw_palette[PAL_HUD_DIM], by);
+        }
+        y += rowh;
+    }
+
+    if (where[0]) {
+        fb_text(fb, cx - fb_text_width(ts, where) / 2, y, ts,
+                sw_palette[PAL_HUD_DIM], where);
+        y += 10 * ts;
+        fb_text(fb, cx - fb_text_width(ts, how) / 2, y, ts,
+                sw_palette[PAL_HUD_DIM], how);
+        y += 12 * ts;
+    }
+
+    if (note[0])
+        fb_text(fb, cx - fb_text_width(ts, note) / 2, y, ts,
+                sw_palette[PAL_TEAM2], note);
+    y += 12 * ts;
+
+    fb_text(fb, cx - fb_text_width(ts * 2, foot) / 2, y, ts * 2,
+            sw_palette[PAL_TEAM1], foot);
 }

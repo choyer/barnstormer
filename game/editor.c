@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "editor.h"
+#include "paths.h"
 
 #define NEW_GROUND_HEIGHT  60     /* a plain with room to dive into it */
 
@@ -184,6 +185,8 @@ int editor_open(editor_t *ed, const char *path)
 int editor_save(editor_t *ed)
 {
     sync(ed);
+    /* Saving into the level directory should not require having made it. */
+    sw_make_parent(ed->path);
     if (level_save(ed->path, &ed->view) < 0) {
         status(ed, "not saved: %s", level_error());
         return -1;

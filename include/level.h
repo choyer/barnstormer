@@ -85,6 +85,26 @@ int level_load(const char *path, level_t **out);
 int level_free(level_t *lvl);
 int level_save(const char *path, const level_t *lvl);
 
+/* ---- the level directory ----------------------------------------------- */
+
+#define LEVEL_LIST_MAX 64
+
+typedef struct {
+    char path[512];
+    char name[LEVEL_NAME_MAX + 1];
+    char author[LEVEL_NAME_MAX + 1];
+} level_info_t;
+
+/* Where user levels live: $XDG_DATA_HOME/barnstormer/levels, or
+ * ~/.local/share/barnstormer/levels.  False if neither can be worked out. */
+bool level_dir(char *buf, size_t n);
+
+/* Every *.lvl in there that loads, by name.  Returns how many were written to
+ * `out`; `skipped`, if given, counts the files that are there and will not
+ * load -- worth saying out loud, since the alternative is a level silently
+ * missing from the list. */
+int level_list(level_info_t *out, int max, int *skipped);
+
 /* Whether a level in memory obeys the format's rules -- 0 if it does, -1 with
  * errno EINVAL and level_error() set if it does not.  level_save() applies
  * this itself; the editor uses it to check a change before keeping it. */

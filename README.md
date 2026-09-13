@@ -67,6 +67,12 @@ barnstormer --help
 strictly checked: a file that would make a broken world is refused with the
 line that is wrong rather than loaded. Runs on an authored level are not
 ranked, because the high score boards are scores made on the classic map.
+Levels you collect go in `~/.local/share/barnstormer/levels` (or
+`$XDG_DATA_HOME/barnstormer/levels`). Anything with a `.lvl` extension in
+there is offered by **LEVEL** on the title screen — pick one, then pick a mode
+and fly it. A file that will not load is not silently dropped: the picker says
+how many are there and refusing to load.
+
 ## Building a level
 
 ```sh
@@ -81,6 +87,10 @@ barnstormer --edit my-field.lvl    # opens it, or starts it if it is not there
 | `f` | flatten under the brush | | `k` | which kind, or which way it faces |
 | `s` | smooth | | `w` | write the file |
 | `Tab` | fly it — and again to come back | | `Esc` | leave (twice, if unsaved) |
+
+The editor writes wherever you tell it to, creating the directory if it needs
+to, so `--edit ~/.local/share/barnstormer/levels/my-field.lvl` puts a level
+straight into the picker.
 
 The level you are building is always a level: a change that would break one of
 the format's rules — a building across a landing strip, ground dug out from

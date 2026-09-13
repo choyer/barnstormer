@@ -79,9 +79,23 @@ void render_layout(render_ctx_t *c, render_style_t style, int fb_w, int fb_h);
 /* Draw a whole frame. */
 void render_frame(framebuf_t *fb, const render_ctx_t *c, game_t *g);
 
-/* Title/attract screen; `t` is a monotonically rising frame counter. */
+/* Title/attract screen; `t` is a monotonically rising frame counter.
+ * `level_name` is NULL for the built-in map. */
 void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
-                  int menu_sel);
+                  int menu_sel, const char *level_name);
+
+/* Choosing a level from the ones in the level directory.  Row 0 is always the
+ * built-in map, so `sel` runs 0..n. */
+typedef struct {
+    const level_info_t *items;
+    int n;
+    int sel;
+    int skipped;              /* files there that would not load          */
+    const char *dir;          /* where they live, for when there are none */
+} levelpick_t;
+
+void render_levels(framebuf_t *fb, const render_ctx_t *c,
+                   const levelpick_t *v);
 
 /* End-of-run summary. */
 void render_gameover(framebuf_t *fb, const render_ctx_t *c, game_t *g);

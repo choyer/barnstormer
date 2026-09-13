@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "paths.h"
 #include "score.h"
 
 #define SCORE_HEADER "# barnstormer scores v1"
@@ -98,42 +99,11 @@ char score_char_cycle(char c, int dir)
 
 /* ---- paths -------------------------------------------------------------- */
 
-static bool score_dir(char *buf, size_t n)
-{
-    const char *data = getenv("XDG_DATA_HOME");
-    if (data && *data == '/')
-        return snprintf(buf, n, "%s/barnstormer", data) < (int)n;
-
-    const char *home = getenv("HOME");
-    if (!home || *home != '/')
-        return false;
-    return snprintf(buf, n, "%s/.local/share/barnstormer", home) < (int)n;
-}
-
 static bool score_file(char *buf, size_t n, const char *suffix)
 {
-    char dir[512];
-    if (!score_dir(dir, sizeof(dir)))
-        return false;
-    return snprintf(buf, n, "%s/scores%s", dir, suffix) < (int)n;
-}
-
-/* mkdir -p, ignoring everything that is already there. */
-static bool make_dirs(const char *path)
-{
-    char tmp[512];
-    if (snprintf(tmp, sizeof(tmp), "%s", path) >= (int)sizeof(tmp))
-        return false;
-
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p != '/')
-            continue;
-        *p = '\0';
-        if (mkdir(tmp, 0755) < 0 && errno != EEXIST)
-            return false;
-        *p = '/';
-    }
-    return mkdir(tmp, 0755) == 0 || errno == EEXIST;
+    char rel[64];
+    snprintf(rel, sizeof(rel), "scores%s", suffix);
+    return sw_data_path(buf, n, rel);
 }
 
 /* ---- table shuffling ---------------------------------------------------- */
@@ -319,7 +289,7 @@ void scores_load(scores_t *s)
 bool scores_save(const scores_t *s)
 {
     char dir[512], path[600], tmp[620];
-    if (!score_dir(dir, sizeof(dir)) || !make_dirs(dir) ||
+    if (!sw_data_dir(dir, sizeof(dir)) || !sw_make_dirs(dir) ||
         !score_file(path, sizeof(path), "") ||
         !score_file(tmp, sizeof(tmp), ".tmp"))
         return false;

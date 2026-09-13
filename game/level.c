@@ -16,13 +16,16 @@
  */
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
+#include <dirent.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 #include "level.h"
+#include "paths.h"
 
 #define LEVEL_MAGIC  "barnstormer-level"
 #define GROUND_WRAP  68     /* start a new ground line past this column */
@@ -598,6 +601,72 @@ int level_free(level_t *lvl)
     seterr(0, "that level was not loaded from a file");
     errno = EINVAL;
     return -1;
+}
+
+/* ---- the level directory ------------------------------------------------ */
+
+bool level_dir(char *buf, size_t n)
+{
+    return sw_data_path(buf, n, "levels");
+}
+
+static bool ends_in_lvl(const char *name)
+{
+    size_t n = strlen(name);
+    return n > 4 && !strcmp(name + n - 4, ".lvl");
+}
+
+static int by_name(const void *a, const void *b)
+{
+    const level_info_t *x = a, *y = b;
+    int c = strcasecmp(x->name, y->name);
+    return c ? c : strcmp(x->path, y->path);
+}
+
+int level_list(level_info_t *out, int max, int *skipped)
+{
+    if (skipped)
+        *skipped = 0;
+
+    char dir[512];
+    if (!level_dir(dir, sizeof(dir)))
+        return 0;
+
+    DIR *d = opendir(dir);
+    if (!d)
+        return 0;                 /* no directory yet is not an error */
+
+    int n = 0;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL && n < max) {
+        if (e->d_name[0] == '.' || !ends_in_lvl(e->d_name))
+            continue;
+
+        char path[512];
+        if (snprintf(path, sizeof(path), "%s/%s", dir, e->d_name) >=
+            (int)sizeof(path))
+            continue;
+
+        /* Loaded rather than peeked at, so the list only offers levels that
+         * will actually start when they are chosen. */
+        level_t *lv = NULL;
+        if (level_load(path, &lv) < 0) {
+            if (skipped)
+                (*skipped)++;
+            continue;
+        }
+
+        snprintf(out[n].path, sizeof(out[n].path), "%s", path);
+        snprintf(out[n].name, sizeof(out[n].name), "%s", lv->name);
+        snprintf(out[n].author, sizeof(out[n].author), "%s",
+                 lv->author ? lv->author : "");
+        n++;
+        level_free(lv);
+    }
+    closedir(d);
+
+    qsort(out, (size_t)n, sizeof(*out), by_name);
+    return n;
 }
 
 /* ---- saving ------------------------------------------------------------- */

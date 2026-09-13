@@ -87,6 +87,30 @@ else
     printf '  %-38s %s\n' "no score file for unranked runs" "ok"
 fi
 
+# ---- choosing a level ------------------------------------------------------
+
+LVLDIR="$SANDBOX/barnstormer/levels"
+mkdir -p "$LVLDIR"
+printf 'barnstormer-level 1\nname Test Field\nauthor flow\nsize 3000 200\n\nground 3000:100\n\nrunway 400 0\nrunway 2400 1\n' > "$LVLDIR/test-field.lvl"
+
+"$BIN" -q >/dev/null 2>&1 &
+GAME=$!
+sleep 2
+command -v hyprctl >/dev/null &&
+    hyprctl dispatch focuswindow class:barnstormer >/dev/null 2>&1
+sleep 0.7
+
+expect alive  "the title comes up"
+key Down;     expect alive  "Down reaches the level row"
+key Return;   expect alive  "Enter opens the picker"
+key Down;     expect alive  "Down moves off the classic map"
+key Return;   expect alive  "Enter chooses the level"
+key Up;       expect alive  "Up goes back to the modes"
+key Return 1.5; expect alive "Enter flies the chosen level"
+key Escape;   expect alive  "Esc ends the run"
+key Escape;   expect alive  "Esc leaves the summary"
+key Escape 1.2; expect exited "Esc at the title quits"
+
 # ---- the level editor ------------------------------------------------------
 #
 # Same idea, on the other mode the binary has: drive it with the keys a person

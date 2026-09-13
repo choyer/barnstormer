@@ -65,6 +65,19 @@ static void accepts(const char *what, const char *body)
         level_free(lv);
 }
 
+static void write_in(const char *dir, const char *name, const char *body)
+{
+    char path[700];
+    snprintf(path, sizeof(path), "%s/%s", dir, name);
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        printf("    could not write %s\n", path);
+        return;
+    }
+    fputs(body, f);
+    fclose(f);
+}
+
 static char *path_in(char *buf, size_t n, const char *name)
 {
     snprintf(buf, n, "%s/%s", sandbox, name);
@@ -303,6 +316,51 @@ int main(void)
             n += snprintf(big + n, sizeof(big) - (size_t)n,
                           "ox %d 80\n", 700 + i * 20);
         rejects("a third ox", big, "more than 2 oxen");
+    }
+
+    /* ---- the level directory ---- */
+    {
+        setenv("XDG_DATA_HOME", sandbox, 1);
+
+        char dir[512];
+        ok("the level directory sits under XDG_DATA_HOME",
+           level_dir(dir, sizeof(dir)) && strstr(dir, sandbox) &&
+           strstr(dir, "/levels"));
+
+        level_info_t list[LEVEL_LIST_MAX];
+        int skipped = -1;
+        ok("an empty listing is not an error",
+           level_list(list, LEVEL_LIST_MAX, &skipped) == 0 && skipped == 0);
+
+        char cmd2[600];
+        snprintf(cmd2, sizeof(cmd2), "mkdir -p %s", dir);
+        if (system(cmd2) != 0)
+            printf("    could not make %s\n", dir);
+
+        /* One at a time: variant() hands back the same static buffer every
+         * call, so a table of them would be four pointers to the last one. */
+        const char *made[][2] = {
+            { "zebra.lvl",  "name Zebra" },
+            { "alpha.lvl",  "name alpha field" },
+            { "mid.lvl",    "name Mid" },
+        };
+        for (size_t i = 0; i < sizeof(made) / sizeof(made[0]); i++)
+            write_in(dir, made[i][0], variant(2, made[i][1]));
+        write_in(dir, "broken.lvl", variant(5, "ground 2999:100"));
+        write_in(dir, "notes.txt", "not a level at all\n");
+
+        int n = level_list(list, LEVEL_LIST_MAX, &skipped);
+        ok("only the levels that load are offered", n == 3);
+        ok("and the broken one is counted, not hidden", skipped == 1);
+        ok("sorted by name, regardless of case",
+           n == 3 && !strcmp(list[0].name, "alpha field") &&
+           !strcmp(list[1].name, "Mid") && !strcmp(list[2].name, "Zebra"));
+        ok("each with the path it came from",
+           n == 3 && strstr(list[0].path, "alpha.lvl") != NULL);
+
+        /* A listing that cannot fit everything must not overrun. */
+        int few = level_list(list, 2, &skipped);
+        ok("a short list stops at the space it was given", few == 2);
     }
 
     /* ---- failures that are not the file's fault ---- */

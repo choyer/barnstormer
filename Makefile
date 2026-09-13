@@ -44,7 +44,7 @@ PROTO_C  := $(patsubst protocol/%.xml,$(BUILD)/protocol/%-protocol.c,$(PROTOS))
 SRC := main.c \
        game/game.c game/move.c game/collision.c game/autopilot.c \
        game/objects.c game/sound.c game/level.c game/net.c game/score.c \
-       game/editor.c \
+       game/editor.c game/paths.c \
        data/sprites.c data/level_classic.c \
        render/raster.c render/scene.c render/font.c render/sprites_solid.c \
        platform/wl_backend.c \
@@ -126,16 +126,17 @@ clean:
 TEST_SRC := tests/simtest.c \
             game/game.c game/move.c game/collision.c game/autopilot.c \
             game/objects.c game/sound.c game/level.c game/net.c \
-            data/sprites.c data/level_classic.c
+            game/paths.c data/sprites.c data/level_classic.c
 TEST_BIN := $(BUILD)/simtest
 
-SCORE_TEST_SRC := tests/scoretest.c game/score.c
+SCORE_TEST_SRC := tests/scoretest.c game/score.c game/paths.c
 SCORE_TEST_BIN := $(BUILD)/scoretest
 
-LEVEL_TEST_SRC := tests/leveltest.c game/level.c data/level_classic.c
+LEVEL_TEST_SRC := tests/leveltest.c game/level.c game/paths.c \
+                  data/level_classic.c
 LEVEL_TEST_BIN := $(BUILD)/leveltest
 
-EDIT_TEST_SRC := tests/edittest.c game/editor.c game/level.c
+EDIT_TEST_SRC := tests/edittest.c game/editor.c game/level.c game/paths.c
 EDIT_TEST_BIN := $(BUILD)/edittest
 
 .PHONY: test

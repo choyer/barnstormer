@@ -67,10 +67,13 @@ undone if it would break one, with the reason in the status line. So the test
 flight is always available, and saving cannot produce a file the game would
 refuse.
 
+**Choosing one.** `$XDG_DATA_HOME/barnstormer/levels` holds them, and the
+title screen's fourth row opens a picker over it: `level_list()` offers only
+the files that actually load, sorted by name, and says how many would not
+rather than hiding them.
+
 **What is missing.**
 
-* A level directory (`$XDG_DATA_HOME/barnstormer/levels`) and a picker on the
-  title screen, so a level can be chosen without the command line.
 * Editing a level's name and author in place; today they come from the file
   or from its filename.
 * Moving something already placed, rather than erasing it and putting down
