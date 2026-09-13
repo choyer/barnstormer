@@ -1,4 +1,4 @@
-# Barnstormer 1.3.0
+# Barnstormer 1.4.0
 
 Sopwith re-implemented for Wayland: David L. Clark's 1984 biplane dogfight,
 in a window or flying as a transparent overlay across your desktop.
@@ -8,6 +8,53 @@ fixed 12.14 moves a second — and so is the artwork, extracted from the
 original sources rather than redrawn. The renderer is a software rasteriser;
 the only libraries linked are libwayland-client and libxkbcommon, plus ALSA
 for sound. No toolkit, no GL, no SDL.
+
+## Changes in 1.4.0
+
+### Build your own levels
+
+`barnstormer --edit my-field.lvl` opens a level editor, or starts a level if
+that file is not there yet. A terrain brush that raises, lowers, smooths and
+flattens; the four building types, runways and oxen; the level's name and
+author typed in place; `g` to pick something up and carry it somewhere else;
+and `Tab` to fly what you are looking at, `Tab` again to come back.
+
+The level under construction is always a level. Every change is checked
+against the loader's own rules and undone if it would break one, with the
+reason on the status line -- "cannot raise: the runway at 400 is not flat".
+So the test flight is always available, and what you save always loads.
+
+### Playing them
+
+Levels live in `~/.local/share/barnstormer/levels`, and the title screen's
+fourth row opens a picker over them: it offers the ones that load, sorted by
+name, and says how many files are there and refusing rather than hiding them.
+`barnstormer --level FILE` flies one straight from the command line.
+
+Runs on an authored level are deliberately not ranked. The high score boards
+are three columns of scores made on the classic map, and a level with four
+buildings and no enemy would top them without meaning anything.
+
+### The level file
+
+Plain text, hand-editable and diffable, specified in
+[doc/LEVEL_FORMAT.md](doc/LEVEL_FORMAT.md): a run-length encoded height field
+and the placement of runways, buildings and cattle. The loader is strict --
+levels get passed between strangers, and a file that would make a broken world
+is refused with the line that is wrong rather than loaded half-valid.
+
+`level_hash()` is FNV-1a over the canonical form, printed when the editor
+writes a file and when `--level` loads one, so two people can check they hold
+the same level however their copies are laid out. The classic map is
+`3b7788af`.
+
+### Fixed
+
+The count of enemy buildings still standing was a constant rather than a count
+of the buildings on the level, so any level with fewer than twenty of them
+could never be cleared and the `TARGETS` readout started wrong. It is now
+tallied as the buildings go up. The classic map is unaffected -- it has
+exactly twenty.
 
 ## Changes in 1.3.0
 
@@ -49,11 +96,11 @@ git clone https://github.com/choyer/barnstormer
 cd barnstormer/packaging && makepkg -si
 ```
 
-**From the tarball** — `barnstormer-1.3.0-x86_64.tar.gz`:
+**From the tarball** — `barnstormer-1.4.0-x86_64.tar.gz`:
 
 ```bash
-tar xzf barnstormer-1.3.0-x86_64.tar.gz
-cd barnstormer-1.3.0-x86_64 && ./install.sh      # installs to ~/.local
+tar xzf barnstormer-1.4.0-x86_64.tar.gz
+cd barnstormer-1.4.0-x86_64 && ./install.sh      # installs to ~/.local
 ```
 
 **From source** — `make && make install PREFIX=$HOME/.local`.
@@ -110,7 +157,7 @@ without alsa-lib present simply has no sound.
 Without layer-shell the game still runs in a window; it prints a notice and
 falls back.
 
-Verify the download against `barnstormer-1.3.0-x86_64.tar.gz.sha256`.
+Verify the download against `barnstormer-1.4.0-x86_64.tar.gz.sha256`.
 
 ## Credits
 

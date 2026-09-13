@@ -109,7 +109,9 @@ static void usage(const char *argv0)
 "  arrows  move the cursor / raise and lower the ground\n"
 "  space  place      Backspace  remove      t  tool      k  kind\n"
 "  f  flatten        s  smooth              [  ]  brush width\n"
-"  w  write the file      Tab  fly it, and again to come back\n",
+"  g  pick up what is under the cursor, g again to put it down\n"
+"  n  name           a  author             w  write the file\n"
+"  Tab  fly it, and again to come back     Esc  leave\n",
         argv0, MAX_GAME);
 }
 
