@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "audio.h"
+#include "editor.h"
 #include "game.h"
 #include "platform.h"
 #include "render.h"
@@ -24,7 +25,8 @@ extern const int sw_title_menu_len;
 #define BARNSTORMER_VERSION "unknown"
 #endif
 
-typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER, UI_ENTRY } uistate_t;
+typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER, UI_ENTRY,
+               UI_EDIT } uistate_t;
 
 /* SIGUSR1 asks for the keyboard back, for a keybind to fire at the game when
  * the overlay has been left deaf.  See platform_regrab(). */
@@ -90,6 +92,8 @@ static void usage(const char *argv0)
 "  -q, --quiet           start with the sound off\n"
 "  -l, --level FILE      fly a level file instead of the classic map\n"
 "                        (doc/LEVEL_FORMAT.md); runs on it are not ranked\n"
+"  -e, --edit FILE       open FILE in the level editor, creating it if it\n"
+"                        is not there yet\n"
 "\n"
 "Controls:\n"
 "  ,  pull up      /  dive        .  flip over\n"
@@ -99,7 +103,13 @@ static void usage(const char *argv0)
 "  d  throttle and airspeed dials (remembered between runs)\n"
 "  r  restart the current game\n"
 "  Esc  retire (parked at home) or abandon the run (in the air),\n"
-"       then back to the menu, then quit\n",
+"       then back to the menu, then quit\n"
+"\n"
+"Editor (--edit):\n"
+"  arrows  move the cursor / raise and lower the ground\n"
+"  space  place      Backspace  remove      t  tool      k  kind\n"
+"  f  flatten        s  smooth              [  ]  brush width\n"
+"  w  write the file      Tab  fly it, and again to come back\n",
         argv0, MAX_GAME);
 }
 
@@ -113,6 +123,7 @@ int main(int argc, char **argv)
     bool smooth = true;
     const char *dump_path = NULL;
     const char *level_path = NULL;
+    const char *edit_path = NULL;
     long dump_after = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -146,6 +157,9 @@ int main(int argc, char **argv)
         } else if ((!strcmp(a, "-l") || !strcmp(a, "--level")) &&
                    i + 1 < argc) {
             level_path = argv[++i];
+        } else if ((!strcmp(a, "-e") || !strcmp(a, "--edit")) &&
+                   i + 1 < argc) {
+            edit_path = argv[++i];
         } else if (!strcmp(a, "--dump-frame") && i + 1 < argc) {
             dump_path = argv[++i];
         } else if (!strcmp(a, "--dump-after") && i + 1 < argc) {
@@ -179,6 +193,19 @@ int main(int argc, char **argv)
                level->author ? level->author : "");
     }
 
+    /* The editor holds its own working copy; --edit wins if both are given,
+     * since the file being edited is the one you asked to see. */
+    editor_t editor;
+    memset(&editor, 0, sizeof(editor));
+    if (edit_path) {
+        if (editor_open(&editor, edit_path) < 0) {
+            fprintf(stderr, "barnstormer: %s: %s\n", edit_path,
+                    level_error());
+            return 1;
+        }
+        level = editor_level(&editor);
+    }
+
     sprites_build_solid();
 
     platform_opts_t opts = {
@@ -204,7 +231,10 @@ int main(int argc, char **argv)
     game.sound_on = sound;
     game_start(&game, level, mode, gamenum);
 
-    uistate_t ui = skip_title ? UI_PLAY : UI_TITLE;
+    uistate_t ui = edit_path ? UI_EDIT : (skip_title ? UI_PLAY : UI_TITLE);
+    bool flying = false;          /* test flight launched from the editor */
+    bool leave_armed = false;     /* Esc pressed once with work unsaved   */
+    unsigned edit_t = 0;          /* paces the held-key editing keys      */
     int menu_sel = (mode == PLAY_NOVICE) ? 0 : (mode == PLAY_SINGLE ? 1 : 2);
     unsigned title_t = 0;
 
@@ -255,6 +285,42 @@ int main(int argc, char **argv)
 
         int ev;
         while ((ev = platform_take_event(plat)) != SWKEY_NONE) {
+            /* The editor takes the keyboard whole: its letters mean editing,
+             * not sound and restart, and the arrows are read as held keys
+             * further down rather than as events. */
+            if (ui == UI_EDIT) {
+                if (ev == SWKEY_TAB) {
+                    game_start(&game, editor_level(&editor), mode, gamenum);
+                    flying = true;
+                    ui = UI_PLAY;
+                } else if (ev == SWKEY_QUIT) {
+                    if (editor_dirty(&editor) && !leave_armed) {
+                        leave_armed = true;
+                        editor_note(&editor,
+                                    "unsaved -- w to write, Esc again to go");
+                    } else {
+                        running = false;
+                    }
+                    continue;
+                } else if (ev == SWKEY_BACKSPACE) {
+                    editor_erase(&editor);
+                } else if (SWKEY_IS_CHAR(ev)) {
+                    switch (SWKEY_CHAR(ev)) {
+                    case ' ': editor_place(&editor);      break;
+                    case 'T': editor_tool(&editor, 1);    break;
+                    case 'K': editor_variant(&editor, 1); break;
+                    case 'F': editor_flatten(&editor);    break;
+                    case 'S': editor_smooth(&editor);     break;
+                    case 'W': editor_save(&editor);       break;
+                    case '[': editor_brush(&editor, -2);  break;
+                    case ']': editor_brush(&editor, 2);   break;
+                    default: break;
+                    }
+                }
+                leave_armed = false;
+                continue;
+            }
+
             if (ui == UI_ENTRY) {
                 if (ev == SWKEY_LEFT) {
                     cell = (cell + SCORE_NAME_LEN - 1) % SCORE_NAME_LEN;
@@ -292,8 +358,22 @@ int main(int argc, char **argv)
             /* Esc walks back out one step at a time -- run, then score,
              * then the title screen -- so quitting is always a deliberate
              * press from the menu rather than one key away mid-flight. */
+            case SWKEY_TAB:
+                if (flying) {
+                    flying = false;
+                    ui = UI_EDIT;
+                    editor_note(&editor, "back to editing");
+                }
+                break;
+
             case SWKEY_QUIT:
-                if (ui == UI_PLAY || ui == UI_PAUSED) {
+                /* A test flight is not a run: Esc puts the level back on the
+                 * bench rather than walking out through the score screen. */
+                if (flying && (ui == UI_PLAY || ui == UI_PAUSED)) {
+                    flying = false;
+                    ui = UI_EDIT;
+                    editor_note(&editor, "back to editing");
+                } else if (ui == UI_PLAY || ui == UI_PAUSED) {
                     game_abandon(&game);
                 } else if (ui == UI_OVER) {
                     ui = UI_TITLE;
@@ -362,6 +442,25 @@ int main(int argc, char **argv)
             }
         }
 
+        /* Panning and sculpting are held, not typed: a world 3000 columns
+         * wide is no place to walk one key press at a time.  The longer an
+         * arrow is down the faster the cursor runs. */
+        if (ui == UI_EDIT) {
+            uint16_t held = platform_keys(plat);
+            int dir = ((held & K_ACCEL) ? 1 : 0) - ((held & K_DEACC) ? 1 : 0);
+            if (dir) {
+                edit_t++;
+                int step = 1 + (int)(edit_t / 8);
+                editor_move(&editor, dir * (step > 16 ? 16 : step));
+            } else {
+                edit_t = 0;
+            }
+
+            int lift = ((held & K_FLAPU) ? 1 : 0) - ((held & K_FLAPD) ? 1 : 0);
+            if (lift && (frames % 3) == 0)
+                editor_raise(&editor, lift);
+        }
+
         if (ui == UI_PLAY) {
             tick_acc += dt;
             snd_acc += dt;
@@ -391,7 +490,11 @@ int main(int argc, char **argv)
          * what lets Esc get off this screen: `game.over` stays true until the
          * next game starts, so a looser test drags the title screen straight
          * back here on the same frame. */
-        if (game.over && (ui == UI_PLAY || ui == UI_PAUSED)) {
+        if (game.over && flying && (ui == UI_PLAY || ui == UI_PAUSED)) {
+            flying = false;
+            ui = UI_EDIT;
+            editor_note(&editor, "the test flight ended -- back to editing");
+        } else if (game.over && (ui == UI_PLAY || ui == UI_PAUSED)) {
             int b = score_board_of(mode);
             if (b < 0) b = 0;
             final_score = game_player(&game)->score;
@@ -459,6 +562,23 @@ int main(int argc, char **argv)
                             fb->h / 2 + ctx.scale * 3 * 7 + ctx.scale * 4,
                             ctx.scale, sw_palette[PAL_HUD], hint);
                 }
+                break;
+            }
+            case UI_EDIT: {
+                editview_t v = {
+                    .level     = editor_level(&editor),
+                    .cursor    = editor.cursor,
+                    .brush     = editor.brush,
+                    .footprint = editor.tool == ED_TERRAIN ? 0
+                               : editor.tool == ED_RUNWAY ? LEVEL_RUNWAY_SPAN
+                                                          : LEVEL_TARGET_WIDTH,
+                    .tool      = editor_tool_name(&editor),
+                    .variant   = editor_variant_name(&editor),
+                    .status    = editor_status(&editor),
+                    .path      = editor.path,
+                    .dirty     = editor_dirty(&editor),
+                };
+                render_edit(fb, &ctx, &v);
                 break;
             }
             case UI_OVER:

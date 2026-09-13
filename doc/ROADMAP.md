@@ -55,18 +55,26 @@ and an identical 3000-tick replay hash (`tests/leveltest.c`). `barnstormer
 --level FILE` flies one; such a run is deliberately not ranked, since the
 boards are scores made on the classic map.
 
+**The editor.** `barnstormer --edit FILE` opens a level, or starts one if the
+file is not there yet: a terrain brush (raise, lower, smooth, flatten), the
+four building types, runways and oxen, and `Tab` to fly what you are looking
+at and `Tab` again to come back. The model is in `game/editor.c`, headless and
+tested (`tests/edittest.c`); the drawing is `render_edit()`.
+
+Its one rule is that the level under construction is always a level: every
+change is checked against `level_check()` -- the loader's own validation -- and
+undone if it would break one, with the reason in the status line. So the test
+flight is always available, and saving cannot produce a file the game would
+refuse.
+
 **What is missing.**
 
-* An editor mode: `barnstormer --edit FILE`. It reuses `render_frame()` for the
-  world view and adds
-  - a terrain brush (raise/lower/smooth, with the 26..199 clamp the game
-    already assumes),
-  - placement of the four building types, the two runways and the oxen,
-  - validation (the loader's rules, applied live: a runway needs 21 columns
-    flat to within 4, buildings need 16 clear and must stay off the strips),
-  - `Tab` to fly the level immediately and `Tab` again to return to editing.
 * A level directory (`$XDG_DATA_HOME/barnstormer/levels`) and a picker on the
-  title screen.
+  title screen, so a level can be chosen without the command line.
+* Editing a level's name and author in place; today they come from the file
+  or from its filename.
+* Moving something already placed, rather than erasing it and putting down
+  another.
 
 **Sharing.** A level is one small text file — 6 KB for the classic level, the
 most detailed there is — so the sharing story is "send the file". A base64 form

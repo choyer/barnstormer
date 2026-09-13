@@ -148,8 +148,8 @@ static void draw_sky(framebuf_t *fb, const render_ctx_t *c)
 
 /* ---- terrain ----------------------------------------------------------- */
 
-static void draw_ground(framebuf_t *fb, const render_ctx_t *c, game_t *g,
-                        double left)
+static void draw_ground(framebuf_t *fb, const render_ctx_t *c,
+                        const uint8_t *ground, double left)
 {
     int s = c->scale;
     uint32_t body = sw_palette[PAL_GROUND];
@@ -161,7 +161,7 @@ static void draw_ground(framebuf_t *fb, const render_ctx_t *c, game_t *g,
     for (int wx = first; wx <= first + c->view_w; wx++) {
         if (wx < 0 || wx >= MAX_X)
             continue;
-        int h = g->ground[wx];
+        int h = ground[wx];
         if (h > c->view_h - 1)
             h = c->view_h - 1;
 
@@ -509,7 +509,7 @@ void render_frame(framebuf_t *fb, const render_ctx_t *c, game_t *g)
 
     double left = view_left(c, g);
 
-    draw_ground(fb, c, g, left);
+    draw_ground(fb, c, g->ground, left);
 
     /* Static scenery first so aircraft pass in front of it. */
     for (object_t *ob = g->top; ob; ob = ob->next)
@@ -846,5 +846,250 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
                     5 * sc, bar, sw_palette[PAL_TEAM1]);
         }
         y += (7 + 3 + lines[i].gap * 3) * sc;
+    }
+}
+
+/* ---- the level editor -------------------------------------------------- */
+
+/* The terrain the game will actually build: buildings stand on pads it levels
+ * under them, so the editor shows those rather than the raw height field it
+ * is storing.  Buildings are at least 16 columns apart, so no pad can disturb
+ * another and the order they are applied in does not matter. */
+static void bake_terrain(const level_t *lv, uint8_t *out)
+{
+    memcpy(out, lv->ground, MAX_X);
+    for (int i = 0; i < lv->n_targets; i++) {
+        int x = lv->targets[i].x;
+        int h = game_pad_height(lv->ground, x);
+        for (int j = x; j < x + LEVEL_TARGET_WIDTH && j < MAX_X; j++)
+            out[j] = (uint8_t)h;
+    }
+}
+
+/* Scenery, drawn through the same path the game uses: a building's sprite
+ * frame is its kind, and the three either side of centre are the player's,
+ * exactly as init_targets() decides it. */
+static void draw_level_scenery(framebuf_t *fb, const render_ctx_t *c,
+                               const level_t *lv, double left)
+{
+    for (int i = 0; i < lv->n_targets; i++) {
+        object_t ob = {
+            .type = OBJ_TARGET,
+            .state = ST_STANDING,
+            .x = lv->targets[i].x,
+            .y = game_pad_height(lv->ground, lv->targets[i].x) + 16,
+            .clr = (i < MAX_TARG / 2 && i > MAX_TARG / 2 - 4) ? 1 : 2,
+            .sprite_set = SPRITE_TARGET,
+            .sprite_frame = lv->targets[i].kind,
+            .symw = 16, .symh = 16,
+        };
+        draw_object(fb, c, &ob, left);
+    }
+
+    for (int i = 0; i < lv->n_oxen; i++) {
+        object_t ob = {
+            .type = OBJ_OX,
+            .state = ST_STANDING,
+            .x = lv->oxen[i].x,
+            .y = lv->oxen[i].y,
+            .clr = 1,
+            .sprite_set = SPRITE_OX,
+            .sprite_frame = 0,
+            .symw = 16, .symh = 16,
+        };
+        draw_object(fb, c, &ob, left);
+    }
+}
+
+/* Runways are invisible in the game -- they are just flat ground -- so the
+ * editor has to draw them, or they cannot be placed with any confidence. */
+static void draw_runways(framebuf_t *fb, const render_ctx_t *c,
+                         const level_t *lv, const uint8_t *baked, double left)
+{
+    int s = c->scale;
+
+    for (int i = 0; i < lv->n_runways; i++) {
+        int rx = lv->runways[i].x;
+        if (rx + LEVEL_RUNWAY_SPAN < left || rx > left + c->view_w)
+            continue;
+
+        int h = baked[rx < MAX_X ? rx : MAX_X - 1];
+        int y = screen_y(c, h);
+        int x0 = screen_x(c, left, rx);
+        uint32_t col = sw_palette[i < 2 ? PAL_HUD : PAL_HUD_DIM];
+
+        fb_rect(fb, x0, y - s, LEVEL_RUNWAY_SPAN * s, s, col);
+
+        /* A tick at the end an aircraft points towards. */
+        int tip = lv->runways[i].orient ? x0 : x0 + (LEVEL_RUNWAY_SPAN - 1) * s;
+        fb_rect(fb, tip, y - 4 * s, s, 4 * s, col);
+
+        /* At most LEVEL_MAX_RUNWAYS of them, so the tag is one digit. */
+        char tag[2] = { (char)('1' + i), '\0' };
+        fb_text(fb, x0, y - 11 * s, s, col, tag);
+    }
+}
+
+/* Where the next thing will land, and how wide the terrain brush is. */
+static void draw_cursor(framebuf_t *fb, const render_ctx_t *c,
+                        const editview_t *v, const uint8_t *baked, double left)
+{
+    int s = c->scale;
+    int top = c->oy;
+    int bottom = c->oy + c->view_h * s;
+    int cx = screen_x(c, left, v->cursor);
+
+    fb_rect(fb, cx, top, s, bottom - top, sw_palette[PAL_HUD_DIM]);
+
+    if (v->footprint > 0) {
+        /* A ghost of the footprint, sitting on the ground it will stand on. */
+        int fx = v->cursor - v->footprint / 2;
+        if (fx < 0) fx = 0;
+        if (fx > MAX_X - v->footprint) fx = MAX_X - v->footprint;
+        int h = baked[fx];
+        int x0 = screen_x(c, left, fx);
+        int y1 = screen_y(c, h);
+        int y0 = screen_y(c, h + 16);
+        int w = v->footprint * s;
+
+        fb_rect(fb, x0, y0, w, s, sw_palette[PAL_HUD]);
+        fb_rect(fb, x0, y1, w, s, sw_palette[PAL_HUD]);
+        fb_rect(fb, x0, y0, s, y1 - y0, sw_palette[PAL_HUD]);
+        fb_rect(fb, x0 + w - s, y0, s, y1 - y0, sw_palette[PAL_HUD]);
+    } else {
+        /* The terrain brush: mark the span it will move. */
+        int lo = v->cursor - v->brush, hi = v->cursor + v->brush;
+        if (lo < 0) lo = 0;
+        if (hi > MAX_X - 1) hi = MAX_X - 1;
+        int x0 = screen_x(c, left, lo);
+        int x1 = screen_x(c, left, hi);
+        int y = screen_y(c, baked[v->cursor]) - 2 * s;
+        fb_rect(fb, x0, y, x1 - x0 + s, s, sw_palette[PAL_HUD]);
+        fb_rect(fb, x0, y - 2 * s, s, 3 * s, sw_palette[PAL_HUD]);
+        fb_rect(fb, x1, y - 2 * s, s, 3 * s, sw_palette[PAL_HUD]);
+    }
+}
+
+/* The whole world at a glance, with the view box and the cursor on it: an
+ * editor for a map fifteen screens wide needs somewhere to see all of it. */
+static void draw_edit_radar(framebuf_t *fb, const editview_t *v,
+                            const uint8_t *baked, int x, int y, int w, int h,
+                            double left, int view_w)
+{
+    fb_blend_rect(fb, x, y, w, h, 0x60000000);
+
+    for (int col = 0; col < w; col++) {
+        int wx0 = (int)((int64_t)col * MAX_X / w);
+        int wx1 = (int)((int64_t)(col + 1) * MAX_X / w);
+        int maxh = 0;
+        for (int wx = wx0; wx < wx1 && wx < MAX_X; wx++)
+            if (baked[wx] > maxh)
+                maxh = baked[wx];
+        int gh = maxh * h / MAX_Y;
+        if (gh > h) gh = h;
+        fb_rect(fb, x + col, y + h - gh, 1, gh, sw_palette[PAL_GROUND]);
+    }
+
+    const level_t *lv = v->level;
+    for (int i = 0; i < lv->n_runways; i++) {
+        int bx = x + (int)((int64_t)lv->runways[i].x * w / MAX_X);
+        fb_rect(fb, bx, y + h - 3, 2, 3, sw_palette[i < 2 ? PAL_HUD
+                                                          : PAL_HUD_DIM]);
+    }
+    for (int i = 0; i < lv->n_targets; i++) {
+        int bx = x + (int)((int64_t)lv->targets[i].x * w / MAX_X);
+        int by = y + h - 1 - (int)((int64_t)(game_pad_height(lv->ground,
+                                                             lv->targets[i].x)
+                                             + 16) * h / MAX_Y);
+        fb_rect(fb, bx, by, 2, 2,
+                sw_palette[(i < MAX_TARG / 2 && i > MAX_TARG / 2 - 4)
+                               ? PAL_TEAM1 : PAL_TEAM2]);
+    }
+    for (int i = 0; i < lv->n_oxen; i++) {
+        int bx = x + (int)((int64_t)lv->oxen[i].x * w / MAX_X);
+        int by = y + h - 1 - (int)((int64_t)lv->oxen[i].y * h / MAX_Y);
+        fb_rect(fb, bx, by, 2, 2, sw_palette[PAL_WILDLIFE]);
+    }
+
+    int vx = x + (int)((int64_t)left * w / MAX_X);
+    int vw = (int)((int64_t)view_w * w / MAX_X);
+    if (vw < 2) vw = 2;
+    fb_rect(fb, vx, y, vw, 1, sw_palette[PAL_HUD_DIM]);
+    fb_rect(fb, vx, y + h - 1, vw, 1, sw_palette[PAL_HUD_DIM]);
+
+    int cx = x + (int)((int64_t)v->cursor * w / MAX_X);
+    fb_rect(fb, cx, y, 1, h, sw_palette[PAL_HUD]);
+}
+
+void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
+{
+    static uint8_t baked[MAX_X];
+    bake_terrain(v->level, baked);
+
+    double left = v->cursor - c->view_w / 2.0;
+    double max = MAX_X - c->view_w;
+    if (max < 0) max = 0;
+    if (left < 0) left = 0;
+    if (left > max) left = max;
+
+    draw_sky(fb, c);
+    draw_ground(fb, c, baked, left);
+    draw_runways(fb, c, v->level, baked, left);
+    draw_level_scenery(fb, c, v->level, left);
+    draw_cursor(fb, c, v, baked, left);
+
+    /* ---- the panel ---- */
+    int ts = fb->w / 480;
+    if (ts < 1) ts = 1;
+    if (ts > 4) ts = 4;
+    int pad = 4 * ts, rowh = 9 * ts;
+    int band = 2 * pad + 3 * rowh;
+    while (band > fb->h / 3 && ts > 1) {
+        ts--;
+        pad = 4 * ts;
+        rowh = 9 * ts;
+        band = 2 * pad + 3 * rowh;
+    }
+    int y0 = fb->h - band;
+
+    fb_blend_rect(fb, 0, y0, fb->w, band, 0x90000000);
+    fb_rect(fb, 0, y0, fb->w, 1, sw_palette[PAL_HUD_DIM]);
+
+    /* The map comes first: it is the thing that cannot be made smaller and
+     * still be read, so it takes its width off the right and the text lays
+     * itself out in what is left. */
+    int rw = fb->w / 5;
+    int rx = fb->w - pad - rw;
+    if (rw > 40)
+        draw_edit_radar(fb, v, baked, rx, y0 + pad, rw, band - 2 * pad,
+                        left, c->view_w);
+    else
+        rx = fb->w - pad;
+
+    int gx = pad, gy = y0 + pad;
+    char buf[128];
+
+    snprintf(buf, sizeof(buf), "%s %s", v->tool, v->variant);
+    fb_text(fb, gx, gy, ts, sw_palette[PAL_HUD], buf);
+
+    snprintf(buf, sizeof(buf), "X%5d  H%4d  BRUSH%4d", v->cursor,
+             baked[v->cursor], v->brush * 2 + 1);
+    fb_text(fb, gx, gy + rowh, ts, sw_palette[PAL_HUD_DIM], buf);
+
+    snprintf(buf, sizeof(buf), "%s%s", v->dirty ? "*" : " ",
+             v->path ? v->path : "");
+    fb_text(fb, gx, gy + 2 * rowh, ts,
+            sw_palette[v->dirty ? PAL_HUD : PAL_HUD_DIM], buf);
+
+    /* The keys are reference, not reading: a size down from everything else,
+     * so they stay available without competing with the status line. */
+    int hs = ts > 1 ? ts - 1 : 1;
+    int mx = gx + 26 * 6 * ts + 6 * ts;
+    if (mx < rx) {
+        fb_text(fb, mx, gy, ts, sw_palette[PAL_HUD], v->status);
+        fb_text(fb, mx, gy + rowh, hs, sw_palette[PAL_HUD_DIM],
+                "SPACE PLACE  BKSP ERASE  T TOOL  K KIND  F FLAT  S SMOOTH");
+        fb_text(fb, mx, gy + 2 * rowh, hs, sw_palette[PAL_HUD_DIM],
+                "ARROWS MOVE/RAISE  [ ] BRUSH  W WRITE  TAB FLY  ESC LEAVE");
     }
 }

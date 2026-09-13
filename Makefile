@@ -44,6 +44,7 @@ PROTO_C  := $(patsubst protocol/%.xml,$(BUILD)/protocol/%-protocol.c,$(PROTOS))
 SRC := main.c \
        game/game.c game/move.c game/collision.c game/autopilot.c \
        game/objects.c game/sound.c game/level.c game/net.c game/score.c \
+       game/editor.c \
        data/sprites.c data/level_classic.c \
        render/raster.c render/scene.c render/font.c render/sprites_solid.c \
        platform/wl_backend.c \
@@ -134,13 +135,18 @@ SCORE_TEST_BIN := $(BUILD)/scoretest
 LEVEL_TEST_SRC := tests/leveltest.c game/level.c data/level_classic.c
 LEVEL_TEST_BIN := $(BUILD)/leveltest
 
+EDIT_TEST_SRC := tests/edittest.c game/editor.c game/level.c
+EDIT_TEST_BIN := $(BUILD)/edittest
+
 .PHONY: test
-test: $(TEST_BIN) $(SCORE_TEST_BIN) $(LEVEL_TEST_BIN)
+test: $(TEST_BIN) $(SCORE_TEST_BIN) $(LEVEL_TEST_BIN) $(EDIT_TEST_BIN)
 	$(TEST_BIN)
 	@echo
 	$(SCORE_TEST_BIN)
 	@echo
 	$(LEVEL_TEST_BIN)
+	@echo
+	$(EDIT_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC) | $(PROTO_H)
 	@mkdir -p $(dir $@)
@@ -163,3 +169,8 @@ $(LEVEL_TEST_BIN): $(LEVEL_TEST_SRC)
 	@mkdir -p $(dir $@)
 	$(CC) -std=c11 $(WARN) -Iinclude -O1 -g -fsanitize=address,undefined \
 	    -o $@ $(LEVEL_TEST_SRC)
+
+$(EDIT_TEST_BIN): $(EDIT_TEST_SRC)
+	@mkdir -p $(dir $@)
+	$(CC) -std=c11 $(WARN) -Iinclude -O1 -g -fsanitize=address,undefined \
+	    -o $@ $(EDIT_TEST_SRC)

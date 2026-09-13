@@ -67,7 +67,25 @@ barnstormer --help
 strictly checked: a file that would make a broken world is refused with the
 line that is wrong rather than loaded. Runs on an authored level are not
 ranked, because the high score boards are scores made on the classic map.
-There is no editor yet; see [doc/ROADMAP.md](doc/ROADMAP.md).
+## Building a level
+
+```sh
+barnstormer --edit my-field.lvl    # opens it, or starts it if it is not there
+```
+
+| Key | Action | | Key | Action |
+|-----|--------|-|-----|--------|
+| `←` `→` | move the cursor (hold to run) | | `Space` | place |
+| `↑` `↓` | raise / lower the ground | | `Backspace` | remove |
+| `[` `]` | brush width | | `t` | terrain, building, runway, ox |
+| `f` | flatten under the brush | | `k` | which kind, or which way it faces |
+| `s` | smooth | | `w` | write the file |
+| `Tab` | fly it — and again to come back | | `Esc` | leave (twice, if unsaved) |
+
+The level you are building is always a level: a change that would break one of
+the format's rules — a building across a landing strip, ground dug out from
+under a runway — is refused and the status line says which rule, so `Tab` is
+always ready and what you save always loads.
 
 | Key       | Action                                       |
 |-----------|----------------------------------------------|

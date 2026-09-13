@@ -104,6 +104,24 @@ typedef struct {
 void render_scores(framebuf_t *fb, const render_ctx_t *c,
                    const scoreboard_t *v);
 
+/* The level editor's view of the world.  Passed as a snapshot rather than as
+ * the editor itself, so the renderer stays ignorant of how editing works --
+ * the same arrangement as scoreboard_t. */
+typedef struct {
+    const level_t *level;
+    int   cursor;                /* the world column being worked on      */
+    int   brush;                 /* terrain brush half-width              */
+    int   footprint;             /* columns the current tool will occupy,
+                                    0 when it places nothing              */
+    const char *tool;
+    const char *variant;         /* "" when the tool has only one         */
+    const char *status;
+    const char *path;
+    bool  dirty;
+} editview_t;
+
+void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v);
+
 /* ---- primitives, also used by the HUD and title screens ---------------- */
 
 void fb_clear(framebuf_t *fb, uint32_t argb);

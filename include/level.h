@@ -85,7 +85,12 @@ int level_load(const char *path, level_t **out);
 int level_free(level_t *lvl);
 int level_save(const char *path, const level_t *lvl);
 
-/* Why the last level_load() or level_save() failed, in a form worth showing
+/* Whether a level in memory obeys the format's rules -- 0 if it does, -1 with
+ * errno EINVAL and level_error() set if it does not.  level_save() applies
+ * this itself; the editor uses it to check a change before keeping it. */
+int level_check(const level_t *lvl);
+
+/* Why the last level_load(), level_save() or level_check() failed, in a form worth showing
  * to whoever is editing the file: "line 12: height 210 is outside 26..199".
  * Empty until one of them fails, and valid until the next call. */
 const char *level_error(void);

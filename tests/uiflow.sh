@@ -87,6 +87,38 @@ else
     printf '  %-38s %s\n' "no score file for unranked runs" "ok"
 fi
 
+# ---- the level editor ------------------------------------------------------
+#
+# Same idea, on the other mode the binary has: drive it with the keys a person
+# would use and check that what falls out is a level file.
+
+LVL="$SANDBOX/flow.lvl"
+"$BIN" --edit "$LVL" -q >/dev/null 2>&1 &
+GAME=$!
+sleep 2
+command -v hyprctl >/dev/null &&
+    hyprctl dispatch focuswindow class:barnstormer >/dev/null 2>&1
+sleep 0.7
+
+expect alive  "the editor opens on a new file"
+key t;        expect alive  "t picks the building tool"
+key space;    expect alive  "space places one"
+key w;        expect alive  "w writes the file"
+key Tab 1.5;  expect alive  "Tab flies the level"
+key Tab 1.2;  expect alive  "Tab comes back to editing"
+key f;        expect alive  "f flattens, leaving work unsaved"
+key Escape;   expect alive  "Esc with work unsaved does not leave"
+key Escape 1.2; expect exited "Esc again leaves"
+
+if grep -q '^barnstormer-level 1' "$LVL" 2>/dev/null &&
+   grep -q '^target ' "$LVL" 2>/dev/null; then
+    printf '  %-38s %s\n' "the editor wrote a level with a building" "ok"
+else
+    printf '  %-38s FAILED\n' "the editor wrote a level with a building"
+    failures=$((failures + 1))
+fi
+step=$((step + 1))
+
 echo
 if (( failures )); then
     echo "FAILURES ($failures of $((step + 1)) checks)"

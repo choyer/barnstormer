@@ -105,6 +105,10 @@ static inline bool game_ranked(const game_t *g)
            g->level == &level_classic;
 }
 
+/* Where a building placed at world column `x` stands.  Shared with the level
+ * editor so that it draws what game_start() will build. */
+int game_pad_height(const uint8_t *ground, int x);
+
 /* Build a fresh run.  `level` must outlive the game. */
 void game_start(game_t *g, const level_t *level, playmode_t mode, int gamenum);
 

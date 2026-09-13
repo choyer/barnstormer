@@ -46,6 +46,7 @@ enum {
     SWKEY_RIGHT,
     SWKEY_BACKSPACE,
     SWKEY_DIALS,   /* show/hide the throttle and airspeed strip           */
+    SWKEY_TAB,     /* editor: fly the level, and come back                 */
 
     /* Typed characters ride the same queue: a letter or space arrives as
      * SWKEY_CHAR_BASE + the uppercase character, alongside (not instead of)

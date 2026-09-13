@@ -229,6 +229,24 @@ static int validate(const level_t *lv, const lines_t *ln)
     return 0;
 }
 
+/* The same rules, for a level being built rather than read: the editor calls
+ * this after every change so that it can refuse the change rather than let
+ * somebody author a world that will not load. */
+int level_check(const level_t *lvl)
+{
+    errmsg[0] = '\0';
+    if (!lvl) {
+        seterr(0, "no level");
+        errno = EINVAL;
+        return -1;
+    }
+    if (validate(lvl, NULL) < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    return 0;
+}
+
 /* ---- parsing ------------------------------------------------------------ */
 
 /* Cut the next whitespace-delimited token off the front of *p. */

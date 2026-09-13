@@ -296,12 +296,15 @@ static uint16_t keysym_to_mask(xkb_keysym_t sym)
 }
 
 /* A-Z and space, whatever the layout calls them; 0 for anything else. */
+/* Letters fold to upper case, and the rest of printable ASCII rides along as
+ * itself -- the editor binds brackets, and a screen that only wants initials
+ * filters what it takes anyway (score_char_valid). */
 static char keysym_to_text(xkb_keysym_t sym)
 {
     uint32_t u = xkb_keysym_to_utf32(sym);
     if (u >= 'a' && u <= 'z')
         return (char)(u - 'a' + 'A');
-    if ((u >= 'A' && u <= 'Z') || u == ' ')
+    if (u >= 0x20 && u < 0x7f)
         return (char)u;
     return 0;
 }
@@ -321,6 +324,7 @@ static int keysym_to_event(xkb_keysym_t sym)
     case XKB_KEY_Up:                      return SWKEY_UP;
     case XKB_KEY_Down:                    return SWKEY_DOWN;
     case XKB_KEY_r: case XKB_KEY_R:       return SWKEY_RESTART;
+    case XKB_KEY_Tab: case XKB_KEY_ISO_Left_Tab: return SWKEY_TAB;
     default:                              return SWKEY_NONE;
     }
 }

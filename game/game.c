@@ -134,6 +134,25 @@ void sw_init_comp(game_t *g, object_t *reuse, int slot)
 
 /* ---- static scenery ---------------------------------------------------- */
 
+/* The pad a building stands on: halfway between the highest and lowest ground
+ * under its 16 columns, dropped if that would push its roof through the
+ * ceiling.  The editor draws buildings with this too, so what it shows is
+ * where the game will actually put them. */
+int game_pad_height(const uint8_t *ground, int x)
+{
+    int minh = MAX_Y, maxh = 0;
+    for (int i = x; i < x + LEVEL_TARGET_WIDTH; i++) {
+        int gx = i < 0 ? 0 : (i >= MAX_X ? MAX_X - 1 : i);
+        int h = ground[gx];
+        if (h > maxh) maxh = h;
+        if (h < minh) minh = h;
+    }
+    int aveh = (minh + maxh) >> 1;
+    while (aveh + 16 >= MAX_Y)
+        aveh--;
+    return aveh;
+}
+
 static void init_targets(game_t *g)
 {
     const level_t *lv = g->level;
@@ -156,16 +175,8 @@ static void init_targets(game_t *g)
         g->targets[i] = ob;
 
         int minx = lv->targets[i].x;
-        int maxx = minx + 15;
-        int minh = 999, maxh = 0;
-        for (int x = minx; x <= maxx; x++) {
-            int h = game_ground(g, x);
-            if (h > maxh) maxh = h;
-            if (h < minh) minh = h;
-        }
-        int aveh = (minh + maxh) >> 1;
-        while (aveh + 16 >= MAX_Y)
-            aveh--;
+        int maxx = minx + LEVEL_TARGET_WIDTH - 1;
+        int aveh = game_pad_height(g->ground, minx);
 
         ob->x = minx;
         ob->y = aveh + 16;
