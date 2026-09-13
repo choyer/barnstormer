@@ -90,8 +90,10 @@ would take), and undo.
 most detailed there is — so the sharing story is "send the file". A base64 form
 is still worth having for pasting into a chat window, though it is bigger than
 this document once guessed: gzipped and base64'd, the classic level is 32 lines
-at 76 columns rather than two. `level_hash()`, which peers compare before a
-networked game starts, is not written yet.
+at 76 columns rather than two. `level_hash()` is written: FNV-1a over the
+canonical serialisation, printed when the editor saves and when `--level`
+loads, so two people can check they hold the same level. Netplay compares it
+at join time.
 
 **Ordering.** This should land before multiplayer: a shared level format is a
 prerequisite for peers agreeing on what world they are in.

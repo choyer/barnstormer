@@ -199,7 +199,9 @@ int editor_save(editor_t *ed)
         return -1;
     }
     ed->dirty = false;
-    status(ed, "saved to %s", ed->path);
+    /* With the hash, so that somebody sending the file and somebody receiving
+     * it have something short to compare. */
+    status(ed, "saved [%08x] to %s", level_hash(&ed->view), ed->path);
     return 0;
 }
 

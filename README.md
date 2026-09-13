@@ -62,6 +62,10 @@ barnstormer --level salt-flats.lvl  # fly a level file instead of the map
 barnstormer --help
 ```
 
+It prints the level's name and a short hash (`flying "Salt Flats" by carl
+[ebae6cce]`) — two people can compare those to be sure they are flying the
+same level, and the editor prints the same hash when it writes a file.
+
 `--level` takes a level file in the format described in
 [doc/LEVEL_FORMAT.md](doc/LEVEL_FORMAT.md) — plain text, hand-editable, and
 strictly checked: a file that would make a broken world is refused with the

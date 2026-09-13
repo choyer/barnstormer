@@ -110,6 +110,13 @@ int level_list(level_info_t *out, int max, int *skipped);
  * this itself; the editor uses it to check a change before keeping it. */
 int level_check(const level_t *lvl);
 
+/* FNV-1a over the canonical serialisation -- the exact bytes level_save()
+ * writes -- so two people can check they are holding the same level however
+ * their copies are laid out, and networked peers can refuse to start if they
+ * are not.  Returns 0 for a level that does not pass level_check(), which
+ * means "no hash to compare" rather than any particular level. */
+uint32_t level_hash(const level_t *lvl);
+
 /* Why the last level_load(), level_save() or level_check() failed, in a form worth showing
  * to whoever is editing the file: "line 12: height 210 is outside 26..199".
  * Empty until one of them fails, and valid until the next call. */

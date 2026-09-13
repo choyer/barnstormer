@@ -93,10 +93,23 @@ was already there.
 
 ## Hash
 
-Not implemented yet. `level_hash()` will be FNV-1a over the canonical
-serialisation — the bytes `level_save()` writes, so whitespace and comments
-cannot change it. Networked peers exchange the hash at join time and refuse to
-start if it differs.
+`level_hash()` is FNV-1a over the canonical serialisation — the exact bytes
+`level_save()` writes, so comments, key order and line breaks cannot change
+it. One serialiser feeds both the file and the hash, which is what makes that
+true by construction rather than by two pieces of code agreeing to be careful.
+
+Two copies of a level hash the same however their files are laid out; a single
+column of terrain, a moved runway or a different name gives a different hash.
+A level that does not pass `level_check()` hashes to 0, meaning "nothing to
+compare" rather than any particular level.
+
+The classic level is `3b7788af`. That value is pinned in `tests/leveltest.c`:
+a hash people have exchanged is a promise, and the canonical form should not
+drift without somebody deciding that it should.
+
+The editor prints it when it writes a file, and `--level` prints it when it
+loads one, so two people can check they are flying the same thing. Networked
+peers will exchange it at join time and refuse to start if it differs.
 
 ## Size
 

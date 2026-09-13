@@ -78,6 +78,24 @@ static void write_in(const char *dir, const char *name, const char *body)
     fclose(f);
 }
 
+/* Write a level out, load it back and hash it -- the hash of what a file
+ * means, whatever the file looks like. */
+static uint32_t hash_of(const char *body)
+{
+    char path[512];
+    snprintf(path, sizeof(path), "%s/hash.lvl", sandbox);
+    FILE *f = fopen(path, "w");
+    fputs(body, f);
+    fclose(f);
+
+    level_t *lv = NULL;
+    if (level_load(path, &lv) < 0)
+        return 0;
+    uint32_t h = level_hash(lv);
+    level_free(lv);
+    return h;
+}
+
 static char *path_in(char *buf, size_t n, const char *name)
 {
     snprintf(buf, n, "%s/%s", sandbox, name);
@@ -316,6 +334,52 @@ int main(void)
             n += snprintf(big + n, sizeof(big) - (size_t)n,
                           "ox %d 80\n", 700 + i * 20);
         rejects("a third ox", big, "more than 2 oxen");
+    }
+
+    /* ---- the hash ---- */
+    {
+        /* Pinned, like the replay hash: the canonical form is a promise to
+         * everyone who has already exchanged one, so it must not drift
+         * without somebody deciding that it should. */
+        ok("the classic level hashes to what it always has",
+           level_hash(&level_classic) == 0x3b7788afu);
+
+        path_in(path, sizeof(path), "hashed.lvl");
+        level_t *back = NULL;
+        ok("a level keeps its hash through a save and a load",
+           level_save(path, &level_classic) == 0 &&
+           level_load(path, &back) == 0 &&
+           level_hash(back) == level_hash(&level_classic));
+        if (back)
+            level_free(back);
+
+        uint32_t canonical = hash_of(VALID);
+        uint32_t messy = hash_of(
+            "# a level somebody typed, their way\n"
+            "barnstormer-level 1\n"
+            "size 3000 200\n"
+            "\n"
+            "name Test\n"
+            "wingspan 12\n"          /* an unknown key */
+            "seed 7491\n"
+            "ground 1500:100\n"
+            "   ground 1500:100\n"   /* split, and indented */
+            "runway 100 0\n"
+            "runway 200 1\n");
+        ok("comments, order and line breaks do not change it",
+           canonical != 0 && messy == canonical);
+
+        ok("a different name does", hash_of(variant(2, "name Other")) !=
+           canonical);
+        ok("so does a single column of terrain",
+           hash_of(variant(5, "ground 2999:100 1:101")) != canonical);
+        ok("and so does moving a runway",
+           hash_of(variant(6, "runway 101 0")) != canonical);
+
+        level_t not_a_level = level_classic;
+        not_a_level.n_runways = 1;
+        ok("something that is not a level has no hash",
+           level_hash(&not_a_level) == 0 && level_hash(NULL) == 0);
     }
 
     /* ---- the level directory ---- */

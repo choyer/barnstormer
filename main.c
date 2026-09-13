@@ -188,9 +188,10 @@ int main(int argc, char **argv)
             return 1;
         }
         level = custom;
-        printf("flying \"%s\"%s%s\n", level->name,
+        printf("flying \"%s\"%s%s [%08x]\n", level->name,
                level->author ? " by " : "",
-               level->author ? level->author : "");
+               level->author ? level->author : "",
+               level_hash(level));
     }
 
     /* The editor holds its own working copy; --edit wins if both are given,

@@ -674,14 +674,50 @@ int level_list(level_info_t *out, int max, int *skipped)
 /* The canonical serialisation: no comments, terrain wrapped at a fixed
  * column, sections in a fixed order.  doc/LEVEL_FORMAT.md's hash is defined
  * over exactly these bytes. */
-static void emit(FILE *f, const level_t *lv)
+/* Where a serialisation goes: a file, or a running hash of the same bytes.
+ * One writer serves both, which is what makes doc/LEVEL_FORMAT.md's promise
+ * -- that the hash is taken over exactly what level_save() writes -- true by
+ * construction rather than by two pieces of code agreeing to be careful. */
+typedef struct {
+    FILE *f;              /* NULL when hashing                            */
+    uint32_t hash;
+} sink_t;
+
+#define FNV_OFFSET 2166136261u
+#define FNV_PRIME  16777619u
+
+/* Returns how many characters it wrote, for the terrain line's wrapping. */
+static int emitf(sink_t *s, const char *fmt, ...)
 {
-    fprintf(f, "%s %d\n", LEVEL_MAGIC, LEVEL_FORMAT_VERSION);
-    fprintf(f, "name %s\n", lv->name);
+    char buf[128];
+    va_list ap;
+
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+
+    if (n < 0)
+        return 0;
+    if (n >= (int)sizeof(buf))
+        n = (int)sizeof(buf) - 1;     /* no line of this format is that long */
+
+    if (s->f) {
+        fwrite(buf, 1, (size_t)n, s->f);
+    } else {
+        for (int i = 0; i < n; i++)
+            s->hash = (s->hash ^ (uint8_t)buf[i]) * FNV_PRIME;
+    }
+    return n;
+}
+
+static void emit(sink_t *s, const level_t *lv)
+{
+    emitf(s, "%s %d\n", LEVEL_MAGIC, LEVEL_FORMAT_VERSION);
+    emitf(s, "name %s\n", lv->name);
     if (lv->author && lv->author[0])
-        fprintf(f, "author %s\n", lv->author);
-    fprintf(f, "seed %u\n", lv->rand_seed);
-    fprintf(f, "size %u %u\n\n", lv->width, lv->height);
+        emitf(s, "author %s\n", lv->author);
+    emitf(s, "seed %u\n", lv->rand_seed);
+    emitf(s, "size %u %u\n\n", lv->width, lv->height);
 
     int col = 0;
     for (int x = 0; x < lv->width; ) {
@@ -692,30 +728,43 @@ static void emit(FILE *f, const level_t *lv)
         x += run;
 
         if (col == 0)
-            col = fprintf(f, "ground");
-        col += fprintf(f, " %d:%d", run, h);
+            col = emitf(s, "ground");
+        col += emitf(s, " %d:%d", run, h);
         if (col >= GROUND_WRAP) {
-            fputc('\n', f);
+            emitf(s, "\n");
             col = 0;
         }
     }
     if (col)
-        fputc('\n', f);
+        emitf(s, "\n");
 
     if (lv->n_runways)
-        fputc('\n', f);
+        emitf(s, "\n");
     for (int i = 0; i < lv->n_runways; i++)
-        fprintf(f, "runway %u %u\n", lv->runways[i].x, lv->runways[i].orient);
+        emitf(s, "runway %u %u\n", lv->runways[i].x, lv->runways[i].orient);
 
     if (lv->n_targets)
-        fputc('\n', f);
+        emitf(s, "\n");
     for (int i = 0; i < lv->n_targets; i++)
-        fprintf(f, "target %u %u\n", lv->targets[i].x, lv->targets[i].kind);
+        emitf(s, "target %u %u\n", lv->targets[i].x, lv->targets[i].kind);
 
     if (lv->n_oxen)
-        fputc('\n', f);
+        emitf(s, "\n");
     for (int i = 0; i < lv->n_oxen; i++)
-        fprintf(f, "ox %u %u\n", lv->oxen[i].x, lv->oxen[i].y);
+        emitf(s, "ox %u %u\n", lv->oxen[i].x, lv->oxen[i].y);
+}
+
+uint32_t level_hash(const level_t *lvl)
+{
+    /* Checked first because the serialiser trusts width and the arrays, and
+     * because two peers comparing hashes of things that are not levels have
+     * nothing to talk about.  Zero means "no hash", not "empty level". */
+    if (!lvl || level_check(lvl) < 0)
+        return 0;
+
+    sink_t s = { .f = NULL, .hash = FNV_OFFSET };
+    emit(&s, lvl);
+    return s.hash;
 }
 
 int level_save(const char *path, const level_t *lvl)
@@ -752,7 +801,8 @@ int level_save(const char *path, const level_t *lvl)
         return -1;
     }
 
-    emit(f, lvl);
+    sink_t out = { .f = f, .hash = 0 };
+    emit(&out, lvl);
 
     if (fflush(f) != 0 || ferror(f) || fclose(f) != 0) {
         int e = errno ? errno : EIO;
