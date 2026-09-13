@@ -63,6 +63,7 @@ may contain spaces. `author` is optional and is preserved across a round trip.
 | the 21 columns from each runway x are within 4 of each other, and inside the world | an aircraft's footprint is 21 columns wide and it needs somewhere flat to sit |
 | at most 20 buildings, at most two oxen | fixed-size arrays in `game_t` |
 | buildings at least 16 columns apart, and inside the world | they are 16 wide and the game flattens the ground under them |
+| no building across a runway's 21 columns | aircraft spawn on the strip, inside the building, and it explodes on the first frame |
 | an ox inside the world | it is drawn where it stands |
 | `name` present, `name` and `author` at most 63 bytes | a level with no name cannot be offered in a picker |
 | a fixed-arity line carries no extra words | `runway 100 0 please` is a typo, not a level |

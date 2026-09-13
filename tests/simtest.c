@@ -141,9 +141,9 @@ static int determinism(void)
 /* The clear-the-map counter has to come from the level, not from MAX_TARG:
  * an authored level (doc/LEVEL_FORMAT.md) may carry fewer buildings, and a
  * counter that starts above the number standing can never reach zero. */
-static int target_count(void)
+static int authored_levels(void)
 {
-    printf("%-28s ", "targets counted per level");
+    printf("%-28s ", "authored levels");
     fflush(stdout);
     int before = failures;
 
@@ -171,6 +171,14 @@ static int target_count(void)
         game_tick(g, keys);
     }
     verify(g, 200);
+
+    /* The boards are three columns of scores made on the classic map, so a
+     * run on anything else must not reach them however it ended. */
+    g->end_reason = RUN_RETIRED;
+    check(!game_ranked(g), "an authored level ranks on the boards", 0);
+    game_start(g, &level_classic, PLAY_COMPUTER, 0);
+    g->end_reason = RUN_RETIRED;
+    check(game_ranked(g), "the classic level stopped ranking", 0);
     free(g);
 
     printf("%s\n", failures == before ? "ok" : "FAILED");
@@ -188,7 +196,7 @@ int main(void)
     soak("flying, novice",          PLAY_NOVICE,   0, 8000, true);
     soak("flying, single g7",       PLAY_SINGLE,   7, 8000, true);
     soak("long run, vs computer",   PLAY_COMPUTER, 0, 60000, true);
-    target_count();
+    authored_levels();
     determinism();
 
     printf("%s (%d failures)\n", failures ? "FAILURES" : "all ok", failures);

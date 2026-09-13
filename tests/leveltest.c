@@ -47,6 +47,24 @@ static void rejects(const char *what, const char *body, const char *expect)
         level_free(lv);
 }
 
+/* The other half: a level that sits just inside the rules must still load. */
+static void accepts(const char *what, const char *body)
+{
+    char path[512];
+    snprintf(path, sizeof(path), "%s/good.lvl", sandbox);
+    FILE *f = fopen(path, "w");
+    fputs(body, f);
+    fclose(f);
+
+    level_t *lv = NULL;
+    int rc = level_load(path, &lv);
+    ok(what, rc == 0);
+    if (rc < 0)
+        printf("    rejected: %s\n", level_error());
+    else
+        level_free(lv);
+}
+
 static char *path_in(char *buf, size_t n, const char *name)
 {
     snprintf(buf, n, "%s/%s", sandbox, name);
@@ -248,6 +266,14 @@ int main(void)
     rejects("two buildings on the same ground",
             VALID "target 500 0\ntarget 510 1\n",
             "line 9: the buildings at 500 and 510 are less than 16");
+    rejects("a building across a landing strip",
+            VALID "target 110 0\n",
+            "line 8: the building at 110 stands on the runway at 100");
+    rejects("a building overlapping a strip by one column",
+            VALID "target 85 0\n",
+            "line 8: the building at 85 stands on the runway at 100");
+    accepts("a building one column clear of a strip either side",
+            VALID "target 84 0\ntarget 121 1\n");
     rejects("an ox outside the world",
             VALID "ox 100 250\n", "line 8: the ox at 100,250 is outside");
     rejects("trailing junk after a runway",

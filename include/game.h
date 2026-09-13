@@ -94,10 +94,15 @@ struct game {
 
 /* Whether a finished run counts for the high score table.  Flying into the
  * ground for the fifth time and retiring at your own airfield both do;
- * bailing out mid-air forfeits the score. */
+ * bailing out mid-air forfeits the score.
+ *
+ * So does a run on an authored level: the boards are three columns of scores
+ * made on the classic map, and a level with four buildings and no enemy would
+ * top them without meaning anything. */
 static inline bool game_ranked(const game_t *g)
 {
-    return g->end_reason == RUN_CRASHED || g->end_reason == RUN_RETIRED;
+    return (g->end_reason == RUN_CRASHED || g->end_reason == RUN_RETIRED) &&
+           g->level == &level_classic;
 }
 
 /* Build a fresh run.  `level` must outlive the game. */

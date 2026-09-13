@@ -88,6 +88,8 @@ static void usage(const char *argv0)
 "  -c, --computer        against three computer pilots (the default)\n"
 "  -g, --game N          start at difficulty N (0-%d)\n"
 "  -q, --quiet           start with the sound off\n"
+"  -l, --level FILE      fly a level file instead of the classic map\n"
+"                        (doc/LEVEL_FORMAT.md); runs on it are not ranked\n"
 "\n"
 "Controls:\n"
 "  ,  pull up      /  dive        .  flip over\n"
@@ -110,6 +112,7 @@ int main(int argc, char **argv)
     bool sound = true, grab = true, skip_title = false;
     bool smooth = true;
     const char *dump_path = NULL;
+    const char *level_path = NULL;
     long dump_after = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -140,6 +143,9 @@ int main(int argc, char **argv)
             gamenum = atoi(argv[++i]);
             if (gamenum < 0) gamenum = 0;
             if (gamenum > MAX_GAME) gamenum = MAX_GAME;
+        } else if ((!strcmp(a, "-l") || !strcmp(a, "--level")) &&
+                   i + 1 < argc) {
+            level_path = argv[++i];
         } else if (!strcmp(a, "--dump-frame") && i + 1 < argc) {
             dump_path = argv[++i];
         } else if (!strcmp(a, "--dump-after") && i + 1 < argc) {
@@ -155,6 +161,22 @@ int main(int argc, char **argv)
                             "(try --help)\n", a);
             return 1;
         }
+    }
+
+    /* Before the window: a level that will not load should say so on the
+     * terminal the player typed into, not flash a window and vanish. */
+    const level_t *level = &level_classic;
+    level_t *custom = NULL;
+    if (level_path) {
+        if (level_load(level_path, &custom) < 0) {
+            fprintf(stderr, "barnstormer: %s: %s\n",
+                    level_path, level_error());
+            return 1;
+        }
+        level = custom;
+        printf("flying \"%s\"%s%s\n", level->name,
+               level->author ? " by " : "",
+               level->author ? level->author : "");
     }
 
     sprites_build_solid();
@@ -180,7 +202,7 @@ int main(int argc, char **argv)
     game_t game;
     memset(&game, 0, sizeof(game));
     game.sound_on = sound;
-    game_start(&game, &level_classic, mode, gamenum);
+    game_start(&game, level, mode, gamenum);
 
     uistate_t ui = skip_title ? UI_PLAY : UI_TITLE;
     int menu_sel = (mode == PLAY_NOVICE) ? 0 : (mode == PLAY_SINGLE ? 1 : 2);
@@ -321,17 +343,17 @@ int main(int argc, char **argv)
                 if (ui == UI_TITLE) {
                     mode = (menu_sel == 0) ? PLAY_NOVICE
                          : (menu_sel == 1) ? PLAY_SINGLE : PLAY_COMPUTER;
-                    game_start(&game, &level_classic, mode, gamenum);
+                    game_start(&game, level, mode, gamenum);
                     ui = UI_PLAY;
                 } else if (ui == UI_OVER) {
-                    game_start(&game, &level_classic, mode, gamenum);
+                    game_start(&game, level, mode, gamenum);
                     ui = UI_PLAY;
                 }
                 break;
 
             case SWKEY_RESTART:
                 if (ui == UI_PLAY) {
-                    game_start(&game, &level_classic, mode, gamenum);
+                    game_start(&game, level, mode, gamenum);
                 }
                 break;
 
@@ -470,5 +492,6 @@ int main(int argc, char **argv)
 
     audio_close(audio);
     platform_close(plat);
+    level_free(custom);
     return 0;
 }

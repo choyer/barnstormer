@@ -36,7 +36,11 @@ const char *level_error(void)
     return errmsg;
 }
 
-/* Line 0 means "no line to blame": a level held in memory rather than read
+/* The message never names the file: the caller knows which path it asked for
+ * and prefixes it, so an error reads "levels/foo.lvl: line 6: ..." exactly
+ * once.
+ *
+ * Line 0 means "no line to blame": a level held in memory rather than read
  * from a file, which is the case when level_save() validates its argument. */
 static void seterr(int line, const char *fmt, ...)
 {
@@ -193,6 +197,19 @@ static int validate(const level_t *lv, const lines_t *ln)
                 return -1;
             }
         }
+
+        /* A building across a landing strip is a level that wrecks itself on
+         * the first frame: aircraft spawn on the strip, inside the building,
+         * and it explodes before anyone has touched a key. */
+        for (int j = 0; j < lv->n_runways; j++) {
+            const level_runway_t *rw = &lv->runways[j];
+            if (tg->x <= rw->x + LEVEL_RUNWAY_SPAN - 1 &&
+                tg->x + LEVEL_TARGET_WIDTH - 1 >= rw->x) {
+                seterr(at, "the building at %u stands on the runway at %u",
+                       tg->x, rw->x);
+                return -1;
+            }
+        }
     }
 
     /* Oxen. */
@@ -295,7 +312,7 @@ int level_load(const char *path, level_t **out)
     FILE *f = fopen(path, "r");
     if (!f) {
         int e = errno;
-        seterr(0, "%s: %s", path, strerror(e));
+        seterr(0, "%s", strerror(e));
         errno = e;
         return -1;
     }
@@ -316,7 +333,7 @@ int level_load(const char *path, level_t **out)
     bool seen_magic = false, have_size = false;
     int width = MAX_X, height = MAX_Y;   /* until "size" says otherwise */
     int n_ground = 0, n_runways = 0, n_targets = 0, n_oxen = 0;
-    int lineno = 0, bad = 0;
+    int lineno = 0, bad = 0, ground_line = 0;
     uint32_t seed = 0;
     ssize_t len;
 
@@ -411,6 +428,7 @@ int level_load(const char *path, level_t **out)
                 }
                 memset(a->ground + n_ground, (int)h, (size_t)count);
                 n_ground += (int)count;
+                ground_line = lineno;
                 any = true;
             }
             if (bad)
@@ -479,7 +497,7 @@ int level_load(const char *path, level_t **out)
 
     if (!bad && ferror(f)) {
         int e = errno;
-        seterr(0, "%s: %s", path, strerror(e));
+        seterr(0, "%s", strerror(e));
         free(a);
         free(ln);
         free(line);
@@ -488,12 +506,18 @@ int level_load(const char *path, level_t **out)
         return -1;
     }
 
+    /* These three are properties of the whole file.  Blame the last ground
+     * line for a short height field, since that is where the missing runs
+     * would go; the others have no line to point at. */
+    lineno = 0;
     if (!bad && !seen_magic)
         REJECT("not a barnstormer level file");
     if (!bad && !have_size)
         REJECT("the file has no size line");
-    if (!bad && n_ground != width)
+    if (!bad && n_ground != width) {
+        lineno = ground_line;
         REJECT("the terrain covers %d of the %d columns", n_ground, width);
+    }
 
 #undef REJECT
 
@@ -635,7 +659,7 @@ int level_save(const char *path, const level_t *lvl)
     FILE *f = fopen(tmp, "w");
     if (!f) {
         int e = errno;
-        seterr(0, "%s: %s", tmp, strerror(e));
+        seterr(0, "%s", strerror(e));
         free(tmp);
         errno = e;
         return -1;
@@ -645,7 +669,7 @@ int level_save(const char *path, const level_t *lvl)
 
     if (fflush(f) != 0 || ferror(f) || fclose(f) != 0) {
         int e = errno ? errno : EIO;
-        seterr(0, "%s: %s", tmp, strerror(e));
+        seterr(0, "%s", strerror(e));
         unlink(tmp);
         free(tmp);
         errno = e;
@@ -653,7 +677,7 @@ int level_save(const char *path, const level_t *lvl)
     }
     if (rename(tmp, path) != 0) {
         int e = errno;
-        seterr(0, "%s: %s", path, strerror(e));
+        seterr(0, "%s", strerror(e));
         unlink(tmp);
         free(tmp);
         errno = e;

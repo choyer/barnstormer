@@ -51,7 +51,9 @@ The file format is specified in [LEVEL_FORMAT.md](LEVEL_FORMAT.md) and
 implemented: `level_load()`, `level_save()` and `level_free()` in
 `game/level.c`, with `level_error()` for the message to show whoever is editing
 the file. The classic level round-trips through disk to a byte-identical file
-and an identical 3000-tick replay hash (`tests/leveltest.c`).
+and an identical 3000-tick replay hash (`tests/leveltest.c`). `barnstormer
+--level FILE` flies one; such a run is deliberately not ranked, since the
+boards are scores made on the classic map.
 
 **What is missing.**
 
@@ -61,7 +63,7 @@ and an identical 3000-tick replay hash (`tests/leveltest.c`).
     already assumes),
   - placement of the four building types, the two runways and the oxen,
   - validation (the loader's rules, applied live: a runway needs 21 columns
-    flat to within 4, buildings need 16 clear),
+    flat to within 4, buildings need 16 clear and must stay off the strips),
   - `Tab` to fly the level immediately and `Tab` again to return to editing.
 * A level directory (`$XDG_DATA_HOME/barnstormer/levels`) and a picker on the
   title screen.

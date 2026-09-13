@@ -58,8 +58,16 @@ friends. If it is missing, the game says so and opens a window instead.
 barnstormer                       # title screen, pick a mode
 barnstormer --breakout            # straight into the overlay
 barnstormer --computer --game 3   # skip the menu, start at difficulty 3
+barnstormer --level salt-flats.lvl  # fly a level file instead of the map
 barnstormer --help
 ```
+
+`--level` takes a level file in the format described in
+[doc/LEVEL_FORMAT.md](doc/LEVEL_FORMAT.md) — plain text, hand-editable, and
+strictly checked: a file that would make a broken world is refused with the
+line that is wrong rather than loaded. Runs on an authored level are not
+ranked, because the high score boards are scores made on the classic map.
+There is no editor yet; see [doc/ROADMAP.md](doc/ROADMAP.md).
 
 | Key       | Action                                       |
 |-----------|----------------------------------------------|
