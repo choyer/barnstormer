@@ -436,6 +436,107 @@ int editor_erase(editor_t *ed)
     return -1;
 }
 
+/* ---- typing a name or an author ----------------------------------------- */
+
+void editor_type_begin(editor_t *ed, edfield_t field)
+{
+    if (field != ED_FIELD_NAME && field != ED_FIELD_AUTHOR)
+        return;
+    ed->typing = field;
+    snprintf(ed->typebuf, sizeof(ed->typebuf), "%s",
+             field == ED_FIELD_NAME ? ed->name : ed->author);
+    status(ed, "%s: Enter keeps it, Esc leaves it",
+           editor_field_name(field));
+}
+
+void editor_type_char(editor_t *ed, char c)
+{
+    if (!ed->typing || c < 0x20 || c >= 0x7f)
+        return;
+    size_t n = strlen(ed->typebuf);
+    if (n >= LEVEL_NAME_MAX) {
+        status(ed, "that is as long as a %s can be",
+               editor_field_name(ed->typing));
+        return;
+    }
+    ed->typebuf[n] = c;
+    ed->typebuf[n + 1] = '\0';
+}
+
+void editor_type_back(editor_t *ed)
+{
+    if (!ed->typing)
+        return;
+    size_t n = strlen(ed->typebuf);
+    if (n)
+        ed->typebuf[n - 1] = '\0';
+}
+
+/* Leading and trailing spaces are invisible in a menu and would survive a
+ * round trip as nothing at all, the loader trimming them on the way back in. */
+static void trim(char *s)
+{
+    char *p = s;
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (p != s)
+        memmove(s, p, strlen(p) + 1);
+    char *end = s + strlen(s);
+    while (end > s && (end[-1] == ' ' || end[-1] == '\t'))
+        *--end = '\0';
+}
+
+int editor_type_end(editor_t *ed, bool keep_it)
+{
+    if (!ed->typing)
+        return -1;
+
+    if (!keep_it) {
+        ed->typing = ED_FIELD_NONE;
+        status(ed, "left as it was");
+        return 0;
+    }
+
+    editor_t before = *ed;
+    trim(ed->typebuf);
+
+    if (ed->typing == ED_FIELD_NAME)
+        snprintf(ed->name, sizeof(ed->name), "%s", ed->typebuf);
+    else
+        snprintf(ed->author, sizeof(ed->author), "%s", ed->typebuf);
+
+    /* keep() restores the whole struct on a refusal, which puts the field
+     * back with the text still in it -- exactly where they need to be. */
+    if (keep(ed, &before, "cannot rename") < 0)
+        return -1;
+
+    edfield_t was = ed->typing;
+    ed->typing = ED_FIELD_NONE;
+    if (was == ED_FIELD_NAME)
+        status(ed, "named %s", ed->name);
+    else if (ed->author[0])
+        status(ed, "by %s", ed->author);
+    else
+        status(ed, "author cleared");
+    return 0;
+}
+
+edfield_t editor_typing(const editor_t *ed)
+{
+    return ed->typing;
+}
+
+const char *editor_typing_text(const editor_t *ed)
+{
+    return ed->typebuf;
+}
+
+const char *editor_field_name(edfield_t field)
+{
+    return field == ED_FIELD_NAME ? "NAME"
+         : field == ED_FIELD_AUTHOR ? "AUTHOR" : "";
+}
+
 void editor_note(editor_t *ed, const char *text)
 {
     status(ed, "%s", text);

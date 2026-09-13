@@ -247,6 +247,97 @@ int main(void)
        editor_erase(&ed) < 0 &&
        strstr(editor_status(&ed), "at least 2 runways"));
 
+    /* ---- naming it ---- */
+
+    path_in(path, sizeof(path), "work.lvl");
+    editor_new(&ed, path);
+    ok("a new level is named after its file",
+       !strcmp(editor_level(&ed)->name, "Work"));
+
+    editor_type_begin(&ed, ED_FIELD_NAME);
+    ok("typing starts from what is already there",
+       editor_typing(&ed) == ED_FIELD_NAME &&
+       !strcmp(editor_typing_text(&ed), "Work"));
+
+    for (int i = 0; i < 4; i++)
+        editor_type_back(&ed);
+    for (const char *p2 = "Bridge Too Far"; *p2; p2++)
+        editor_type_char(&ed, *p2);
+    ok("Enter keeps what was typed",
+       editor_type_end(&ed, true) == 0 &&
+       !strcmp(editor_level(&ed)->name, "Bridge Too Far") &&
+       editor_dirty(&ed));
+    ok("and the field closes", editor_typing(&ed) == ED_FIELD_NONE);
+
+    editor_type_begin(&ed, ED_FIELD_NAME);
+    for (const char *p2 = "Nonsense"; *p2; p2++)
+        editor_type_char(&ed, *p2);
+    ok("Esc leaves the field as it was",
+       editor_type_end(&ed, false) == 0 &&
+       !strcmp(editor_level(&ed)->name, "Bridge Too Far"));
+
+    editor_type_begin(&ed, ED_FIELD_NAME);
+    while (*editor_typing_text(&ed))
+        editor_type_back(&ed);
+    ok("a level cannot be left without a name",
+       editor_type_end(&ed, true) < 0 &&
+       strstr(editor_status(&ed), "needs a name"));
+    ok("so the field stays open to be fixed",
+       editor_typing(&ed) == ED_FIELD_NAME);
+    ok("and the name it had is untouched",
+       !strcmp(editor_level(&ed)->name, "Bridge Too Far"));
+    editor_type_end(&ed, false);
+
+    editor_type_begin(&ed, ED_FIELD_NAME);
+    while (*editor_typing_text(&ed))
+        editor_type_back(&ed);
+    for (const char *p2 = "   Spaced Out   "; *p2; p2++)
+        editor_type_char(&ed, *p2);
+    ok("spaces at either end are trimmed",
+       editor_type_end(&ed, true) == 0 &&
+       !strcmp(editor_level(&ed)->name, "Spaced Out"));
+
+    editor_type_begin(&ed, ED_FIELD_NAME);
+    for (int i = 0; i < 200; i++)
+        editor_type_char(&ed, 'x');
+    ok("a name stops at the length the format allows",
+       (int)strlen(editor_typing_text(&ed)) == LEVEL_NAME_MAX);
+    editor_type_end(&ed, false);
+
+    /* ---- and its author ---- */
+
+    editor_type_begin(&ed, ED_FIELD_AUTHOR);
+    for (const char *p2 = "carl"; *p2; p2++)
+        editor_type_char(&ed, *p2);
+    ok("an author can be typed",
+       editor_type_end(&ed, true) == 0 &&
+       editor_level(&ed)->author &&
+       !strcmp(editor_level(&ed)->author, "carl"));
+
+    ok("name and author survive a save and a load", editor_save(&ed) == 0 && ({
+        level_t *back = NULL;
+        bool good = level_load(path, &back) == 0 && back &&
+                    !strcmp(back->name, "Spaced Out") &&
+                    back->author && !strcmp(back->author, "carl");
+        if (back)
+            level_free(back);
+        good;
+    }));
+
+    editor_type_begin(&ed, ED_FIELD_AUTHOR);
+    while (*editor_typing_text(&ed))
+        editor_type_back(&ed);
+    ok("an author can be cleared, unlike a name",
+       editor_type_end(&ed, true) == 0 && editor_level(&ed)->author == NULL);
+    ok("and then no author is written", editor_save(&ed) == 0 && ({
+        level_t *back = NULL;
+        bool good = level_load(path, &back) == 0 && back &&
+                    back->author == NULL;
+        if (back)
+            level_free(back);
+        good;
+    }));
+
     /* ---- the promise, hammered on ---- */
     {
         editor_new(&ed, path);

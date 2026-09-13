@@ -57,8 +57,8 @@ boards are scores made on the classic map.
 
 **The editor.** `barnstormer --edit FILE` opens a level, or starts one if the
 file is not there yet: a terrain brush (raise, lower, smooth, flatten), the
-four building types, runways and oxen, and `Tab` to fly what you are looking
-at and `Tab` again to come back. The model is in `game/editor.c`, headless and
+four building types, runways and oxen, the level's name and author as typed
+text, and `Tab` to fly what you are looking at and `Tab` again to come back. The model is in `game/editor.c`, headless and
 tested (`tests/edittest.c`); the drawing is `render_edit()`.
 
 Its one rule is that the level under construction is always a level: every
@@ -74,8 +74,6 @@ rather than hiding them.
 
 **What is missing.**
 
-* Editing a level's name and author in place; today they come from the file
-  or from its filename.
 * Moving something already placed, rather than erasing it and putting down
   another.
 

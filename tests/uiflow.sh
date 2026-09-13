@@ -127,6 +127,12 @@ sleep 0.7
 expect alive  "the editor opens on a new file"
 key t;        expect alive  "t picks the building tool"
 key space;    expect alive  "space places one"
+key n;        expect alive  "n opens the name field"
+# The field opens with what is already there -- "Flow", from flow.lvl -- so
+# clear it the way a person would before typing over it.
+for _ in 1 2 3 4 5 6; do wtype -k BackSpace; sleep 0.08; done
+wtype "Flow Field"; sleep 0.6
+key Return;   expect alive  "Enter keeps the name"
 key w;        expect alive  "w writes the file"
 key Tab 1.5;  expect alive  "Tab flies the level"
 key Tab 1.2;  expect alive  "Tab comes back to editing"
@@ -139,6 +145,15 @@ if grep -q '^barnstormer-level 1' "$LVL" 2>/dev/null &&
     printf '  %-38s %s\n' "the editor wrote a level with a building" "ok"
 else
     printf '  %-38s FAILED\n' "the editor wrote a level with a building"
+    failures=$((failures + 1))
+fi
+step=$((step + 1))
+
+# Typed as "Flow Field", so the case has to have survived the keyboard.
+if grep -q '^name Flow Field$' "$LVL" 2>/dev/null; then
+    printf '  %-38s %s\n' "with the name that was typed into it" "ok"
+else
+    printf '  %-38s FAILED\n' "with the name that was typed into it"
     failures=$((failures + 1))
 fi
 step=$((step + 1))

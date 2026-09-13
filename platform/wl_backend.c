@@ -296,17 +296,14 @@ static uint16_t keysym_to_mask(xkb_keysym_t sym)
 }
 
 /* A-Z and space, whatever the layout calls them; 0 for anything else. */
-/* Letters fold to upper case, and the rest of printable ASCII rides along as
- * itself -- the editor binds brackets, and a screen that only wants initials
- * filters what it takes anyway (score_char_valid). */
+/* Printable ASCII, as typed.  Case is preserved because the editor takes
+ * level names and authors as text and "Bridge Too Far" is not the same thing
+ * as "BRIDGE TOO FAR"; screens that want one case fold it themselves, which
+ * score_char_valid() already did. */
 static char keysym_to_text(xkb_keysym_t sym)
 {
     uint32_t u = xkb_keysym_to_utf32(sym);
-    if (u >= 'a' && u <= 'z')
-        return (char)(u - 'a' + 'A');
-    if (u >= 0x20 && u < 0x7f)
-        return (char)u;
-    return 0;
+    return (u >= 0x20 && u < 0x7f) ? (char)u : 0;
 }
 
 static int keysym_to_event(xkb_keysym_t sym)

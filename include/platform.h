@@ -48,10 +48,10 @@ enum {
     SWKEY_DIALS,   /* show/hide the throttle and airspeed strip           */
     SWKEY_TAB,     /* editor: fly the level, and come back                 */
 
-    /* Typed characters ride the same queue: a letter or space arrives as
-     * SWKEY_CHAR_BASE + the uppercase character, alongside (not instead of)
-     * any SWKEY_* the same key also means.  States that do not take text
-     * simply ignore them. */
+    /* Typed characters ride the same queue: printable ASCII arrives as
+     * SWKEY_CHAR_BASE + the character as typed, case and all, alongside (not
+     * instead of) any SWKEY_* the same key also means.  States that do not
+     * take text simply ignore them; those that want one case fold it. */
     SWKEY_CHAR_BASE = 0x100,
 };
 

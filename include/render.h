@@ -130,8 +130,10 @@ typedef struct {
     const char *tool;
     const char *variant;         /* "" when the tool has only one         */
     const char *status;
-    const char *path;
+    const char *typing;          /* field being typed, NULL when not      */
+    const char *typing_text;
     bool  dirty;
+    unsigned t;                  /* frame counter, for the caret blink    */
 } editview_t;
 
 void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v);

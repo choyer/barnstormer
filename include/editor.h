@@ -31,6 +31,13 @@ typedef enum {
     ED_TOOL_COUNT,
 } edtool_t;
 
+/* Which text field is being typed, if any. */
+typedef enum {
+    ED_FIELD_NONE = 0,
+    ED_FIELD_NAME,
+    ED_FIELD_AUTHOR,
+} edfield_t;
+
 typedef struct {
     char name[LEVEL_NAME_MAX + 1];
     char author[LEVEL_NAME_MAX + 1];
@@ -50,6 +57,9 @@ typedef struct {
     int brush;                 /* terrain brush half-width, in columns     */
     edtool_t tool;
     int variant;               /* building kind, or runway orientation     */
+
+    edfield_t typing;          /* the field being typed, if any            */
+    char typebuf[LEVEL_NAME_MAX + 1];
 
     bool dirty;                /* changed since the last save              */
     char path[EDITOR_PATH_MAX];
@@ -87,6 +97,24 @@ int editor_flatten(editor_t *ed);             /* the span, level with the
                                                  column under the cursor   */
 int editor_place(editor_t *ed);               /* per the current tool      */
 int editor_erase(editor_t *ed);               /* whatever is at the cursor */
+
+/* ---- typing a name or an author ---------------------------------------- */
+
+/* Begin editing a field, seeded with what is in it.  Everything else is put
+ * on hold until the typing ends one way or the other. */
+void editor_type_begin(editor_t *ed, edfield_t field);
+void editor_type_char(editor_t *ed, char c);
+void editor_type_back(editor_t *ed);
+
+/* Finish: `keep` commits, otherwise the field is left as it was.  Returns 0,
+ * or -1 when what was typed is not allowed -- an empty name, say -- in which
+ * case the field stays open with the text still in it, because throwing it
+ * away would be a worse answer than letting them fix it. */
+int editor_type_end(editor_t *ed, bool keep);
+
+edfield_t   editor_typing(const editor_t *ed);
+const char *editor_typing_text(const editor_t *ed);
+const char *editor_field_name(edfield_t field);
 
 /* Say something in the status line -- for the program around the editor, so
  * that its messages land where the editor's own do. */

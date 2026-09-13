@@ -295,6 +295,20 @@ int main(int argc, char **argv)
              * not sound and restart, and the arrows are read as held keys
              * further down rather than as events. */
             if (ui == UI_EDIT) {
+                /* A field being typed takes every key: the letters are the
+                 * name, not the tool keys they would otherwise be. */
+                if (editor_typing(&editor) != ED_FIELD_NONE) {
+                    if (ev == SWKEY_ENTER)
+                        editor_type_end(&editor, true);
+                    else if (ev == SWKEY_QUIT)
+                        editor_type_end(&editor, false);
+                    else if (ev == SWKEY_BACKSPACE)
+                        editor_type_back(&editor);
+                    else if (SWKEY_IS_CHAR(ev))
+                        editor_type_char(&editor, SWKEY_CHAR(ev));
+                    continue;
+                }
+
                 if (ev == SWKEY_TAB) {
                     game_start(&game, editor_level(&editor), mode, gamenum);
                     flying = true;
@@ -311,13 +325,22 @@ int main(int argc, char **argv)
                 } else if (ev == SWKEY_BACKSPACE) {
                     editor_erase(&editor);
                 } else if (SWKEY_IS_CHAR(ev)) {
-                    switch (SWKEY_CHAR(ev)) {
+                    /* Commands are letters whatever the shift key was doing;
+                     * the text fields below take them as typed. */
+                    char ch = SWKEY_CHAR(ev);
+                    if (ch >= 'a' && ch <= 'z')
+                        ch = (char)(ch - 'a' + 'A');
+                    switch (ch) {
                     case ' ': editor_place(&editor);      break;
                     case 'T': editor_tool(&editor, 1);    break;
                     case 'K': editor_variant(&editor, 1); break;
                     case 'F': editor_flatten(&editor);    break;
                     case 'S': editor_smooth(&editor);     break;
                     case 'W': editor_save(&editor);       break;
+                    case 'N': editor_type_begin(&editor, ED_FIELD_NAME);
+                              break;
+                    case 'A': editor_type_begin(&editor, ED_FIELD_AUTHOR);
+                              break;
                     case '[': editor_brush(&editor, -2);  break;
                     case ']': editor_brush(&editor, 2);   break;
                     default: break;
@@ -493,7 +516,7 @@ int main(int argc, char **argv)
         /* Panning and sculpting are held, not typed: a world 3000 columns
          * wide is no place to walk one key press at a time.  The longer an
          * arrow is down the faster the cursor runs. */
-        if (ui == UI_EDIT) {
+        if (ui == UI_EDIT && editor_typing(&editor) == ED_FIELD_NONE) {
             uint16_t held = platform_keys(plat);
             int dir = ((held & K_ACCEL) ? 1 : 0) - ((held & K_DEACC) ? 1 : 0);
             if (dir) {
@@ -636,8 +659,12 @@ int main(int argc, char **argv)
                     .tool      = editor_tool_name(&editor),
                     .variant   = editor_variant_name(&editor),
                     .status    = editor_status(&editor),
-                    .path      = editor.path,
+                    .typing    = editor_typing(&editor) != ED_FIELD_NONE
+                               ? editor_field_name(editor_typing(&editor))
+                               : NULL,
+                    .typing_text = editor_typing_text(&editor),
                     .dirty     = editor_dirty(&editor),
+                    .t         = title_t++,
                 };
                 render_edit(fb, &ctx, &v);
                 break;

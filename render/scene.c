@@ -1084,8 +1084,9 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
              baked[v->cursor], v->brush * 2 + 1);
     fb_text(fb, gx, gy + rowh, ts, sw_palette[PAL_HUD_DIM], buf);
 
-    snprintf(buf, sizeof(buf), "%s%s", v->dirty ? "*" : " ",
-             v->path ? v->path : "");
+    snprintf(buf, sizeof(buf), "%s%.20s%s%.14s", v->dirty ? "*" : " ",
+             v->level->name, v->level->author ? " BY " : "",
+             v->level->author ? v->level->author : "");
     fb_text(fb, gx, gy + 2 * rowh, ts,
             sw_palette[v->dirty ? PAL_HUD : PAL_HUD_DIM], buf);
 
@@ -1093,12 +1094,26 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
      * so they stay available without competing with the status line. */
     int hs = ts > 1 ? ts - 1 : 1;
     int mx = gx + 26 * 6 * ts + 6 * ts;
-    if (mx < rx) {
-        fb_text(fb, mx, gy, ts, sw_palette[PAL_HUD], v->status);
+    if (mx < rx && v->typing) {
+        /* Typing owns the middle column: what is being typed, with a caret,
+         * and the two keys that end it. */
+        snprintf(buf, sizeof(buf), "%s: %s%s", v->typing, v->typing_text,
+                 ((v->t / 18) & 1) ? "_" : " ");
+        fb_text(fb, mx, gy, ts, sw_palette[PAL_TEAM1], buf);
         fb_text(fb, mx, gy + rowh, hs, sw_palette[PAL_HUD_DIM],
-                "SPACE PLACE  BKSP ERASE  T TOOL  K KIND  F FLAT  S SMOOTH");
-        fb_text(fb, mx, gy + 2 * rowh, hs, sw_palette[PAL_HUD_DIM],
-                "ARROWS MOVE/RAISE  [ ] BRUSH  W WRITE  TAB FLY  ESC LEAVE");
+                "ENTER KEEPS IT   ESC LEAVES IT AS IT WAS");
+    } else if (mx < rx) {
+        static const char *const hint[2] = {
+            "SPACE PLACE  BKSP ERASE  T TOOL  K KIND  N NAME  A AUTHOR",
+            "ARROWS MOVE/RAISE  [ ] BRUSH  F FLAT  S SMOOTH  W WRITE  TAB FLY",
+        };
+        fb_text(fb, mx, gy, ts, sw_palette[PAL_HUD], v->status);
+        /* Dropped rather than run under the map when the window is narrow:
+         * half a line of keys is worse than none. */
+        for (int i = 0; i < 2; i++)
+            if (mx + fb_text_width(hs, hint[i]) < rx)
+                fb_text(fb, mx, gy + (i + 1) * rowh, hs,
+                        sw_palette[PAL_HUD_DIM], hint[i]);
     }
 }
 

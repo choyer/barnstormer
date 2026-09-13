@@ -85,8 +85,13 @@ barnstormer --edit my-field.lvl    # opens it, or starts it if it is not there
 | `↑` `↓` | raise / lower the ground | | `Backspace` | remove |
 | `[` `]` | brush width | | `t` | terrain, building, runway, ox |
 | `f` | flatten under the brush | | `k` | which kind, or which way it faces |
-| `s` | smooth | | `w` | write the file |
+| `s` | smooth | | `n` `a` | name and author |
+| `w` | write the file | | | |
 | `Tab` | fly it — and again to come back | | `Esc` | leave (twice, if unsaved) |
+
+`n` and `a` open the level's name and author for typing: Enter keeps what you
+typed, Esc leaves the field as it was. A level cannot be left without a name,
+but an author is optional and can be cleared.
 
 The editor writes wherever you tell it to, creating the directory if it needs
 to, so `--edit ~/.local/share/barnstormer/levels/my-field.lvl` puts a level
