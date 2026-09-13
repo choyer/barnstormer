@@ -86,8 +86,13 @@ barnstormer --edit my-field.lvl    # opens it, or starts it if it is not there
 | `[` `]` | brush width | | `t` | terrain, building, runway, ox |
 | `f` | flatten under the brush | | `k` | which kind, or which way it faces |
 | `s` | smooth | | `n` `a` | name and author |
-| `w` | write the file | | | |
+| `g` | pick up what is under the cursor, `g` again to put it down | | `w` | write the file |
 | `Tab` | fly it — and again to come back | | `Esc` | leave (twice, if unsaved) |
+
+`g` picks up whatever is under the cursor and carries it until you put it
+down; Esc puts it back where it came from. What you are carrying stays part of
+the level, so it will not be carried anywhere it could not have been placed —
+it stops, the cursor carries on, and it catches up when the way is clear.
 
 `n` and `a` open the level's name and author for typing: Enter keeps what you
 typed, Esc leaves the field as it was. A level cannot be left without a name,

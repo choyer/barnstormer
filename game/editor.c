@@ -88,6 +88,13 @@ static int clampi(int v, int lo, int hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+/* Things are placed, and carried, centred on the cursor -- which is where
+ * they look like they are going. */
+static int centred(const editor_t *ed, int width)
+{
+    return clampi(ed->cursor - width / 2, 0, MAX_X - width);
+}
+
 /* "levels/salt-flats.lvl" -> "Salt Flats".  A level always has a name, and
  * the file it is being written to is a better guess than "Untitled". */
 static void name_from_path(char *dst, size_t n, const char *path)
@@ -203,9 +210,49 @@ const level_t *editor_level(const editor_t *ed)
 
 /* ---- navigation --------------------------------------------------------- */
 
+/* Put what is being carried where the cursor is.  Returns -1, having changed
+ * nothing, if it cannot go there. */
+static int carry_follow(editor_t *ed)
+{
+    editor_t before = *ed;
+
+    switch (ed->carry) {
+    case ED_CARRY_TARGET:
+        ed->targets[ed->carry_i].x =
+            (uint16_t)centred(ed, LEVEL_TARGET_WIDTH);
+        break;
+    case ED_CARRY_RUNWAY:
+        ed->runways[ed->carry_i].x =
+            (uint16_t)centred(ed, LEVEL_RUNWAY_SPAN);
+        break;
+    case ED_CARRY_OX: {
+        int x = centred(ed, LEVEL_TARGET_WIDTH);
+        ed->oxen[ed->carry_i].x = (uint16_t)x;
+        /* An ox walks on the ground rather than through it. */
+        ed->oxen[ed->carry_i].y =
+            (uint16_t)clampi(ed->ground[x] + 16, 0, MAX_Y - 1);
+        break;
+    }
+    default:
+        return 0;
+    }
+
+    return keep(ed, &before, "cannot move it there");
+}
+
 void editor_move(editor_t *ed, int dx)
 {
-    ed->cursor = clampi(ed->cursor + dx, 0, MAX_X - 1);
+    int want = clampi(ed->cursor + dx, 0, MAX_X - 1);
+    ed->cursor = want;
+
+    if (ed->carry == ED_CARRY_NONE)
+        return;
+
+    /* keep() puts the whole struct back when it refuses, cursor included, so
+     * the cursor is re-applied afterwards: what is carried may be stuck, but
+     * the hand holding it should not be. */
+    if (carry_follow(ed) < 0)
+        ed->cursor = want;
 }
 
 void editor_brush(editor_t *ed, int d)
@@ -319,13 +366,6 @@ int editor_flatten(editor_t *ed)
 
 /* ---- placing and erasing ------------------------------------------------ */
 
-/* Things are placed centred on the cursor, which is where they look like they
- * are going. */
-static int centred(const editor_t *ed, int width)
-{
-    return clampi(ed->cursor - width / 2, 0, MAX_X - width);
-}
-
 int editor_place(editor_t *ed)
 {
     editor_t before = *ed;
@@ -434,6 +474,107 @@ int editor_erase(editor_t *ed)
 
     status(ed, "nothing at %d", c);
     return -1;
+}
+
+/* ---- moving something already placed ------------------------------------ */
+
+int editor_grab(editor_t *ed)
+{
+    if (ed->carry != ED_CARRY_NONE)
+        return 0;
+
+    int c = ed->cursor;
+
+    /* The same order erasing uses: the small things before the strip they may
+     * be standing next to. */
+    for (int i = 0; i < ed->n_oxen; i++)
+        if (c >= ed->oxen[i].x && c < ed->oxen[i].x + LEVEL_TARGET_WIDTH) {
+            ed->carry = ED_CARRY_OX;
+            ed->carry_i = i;
+            ed->carry_home = ed->oxen[i];
+            status(ed, "carrying an ox -- g drops it, Esc puts it back");
+            return 0;
+        }
+
+    for (int i = 0; i < ed->n_targets; i++)
+        if (c >= ed->targets[i].x &&
+            c < ed->targets[i].x + LEVEL_TARGET_WIDTH) {
+            ed->carry = ED_CARRY_TARGET;
+            ed->carry_i = i;
+            ed->carry_home = (level_point_t){ ed->targets[i].x, 0 };
+            status(ed, "carrying a %s -- g drops it, Esc puts it back",
+                   kind_name[ed->targets[i].kind & 3]);
+            return 0;
+        }
+
+    for (int i = 0; i < ed->n_runways; i++)
+        if (c >= ed->runways[i].x &&
+            c < ed->runways[i].x + LEVEL_RUNWAY_SPAN) {
+            ed->carry = ED_CARRY_RUNWAY;
+            ed->carry_i = i;
+            ed->carry_home = (level_point_t){ ed->runways[i].x, 0 };
+            status(ed, "carrying runway %d -- g drops it, Esc puts it back",
+                   i + 1);
+            return 0;
+        }
+
+    status(ed, "nothing to pick up at %d", c);
+    return -1;
+}
+
+void editor_drop(editor_t *ed)
+{
+    if (ed->carry == ED_CARRY_NONE)
+        return;
+    ed->carry = ED_CARRY_NONE;
+    status(ed, "put down");
+}
+
+void editor_ungrab(editor_t *ed)
+{
+    switch (ed->carry) {
+    case ED_CARRY_TARGET:
+        ed->targets[ed->carry_i].x = ed->carry_home.x;
+        break;
+    case ED_CARRY_RUNWAY:
+        ed->runways[ed->carry_i].x = ed->carry_home.x;
+        break;
+    case ED_CARRY_OX:
+        ed->oxen[ed->carry_i] = ed->carry_home;
+        break;
+    default:
+        return;
+    }
+    ed->carry = ED_CARRY_NONE;
+    sync(ed);
+    status(ed, "put back where it was");
+}
+
+edcarry_t editor_carrying(const editor_t *ed)
+{
+    return ed->carry;
+}
+
+void editor_carry_span(const editor_t *ed, int *x, int *w)
+{
+    switch (ed->carry) {
+    case ED_CARRY_TARGET:
+        *x = ed->targets[ed->carry_i].x;
+        *w = LEVEL_TARGET_WIDTH;
+        return;
+    case ED_CARRY_RUNWAY:
+        *x = ed->runways[ed->carry_i].x;
+        *w = LEVEL_RUNWAY_SPAN;
+        return;
+    case ED_CARRY_OX:
+        *x = ed->oxen[ed->carry_i].x;
+        *w = LEVEL_TARGET_WIDTH;
+        return;
+    default:
+        *x = 0;
+        *w = 0;
+        return;
+    }
 }
 
 /* ---- typing a name or an author ----------------------------------------- */

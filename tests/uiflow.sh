@@ -134,6 +134,11 @@ for _ in 1 2 3 4 5 6; do wtype -k BackSpace; sleep 0.08; done
 wtype "Flow Field"; sleep 0.6
 key Return;   expect alive  "Enter keeps the name"
 key w;        expect alive  "w writes the file"
+key g;        expect alive  "g picks the building up"
+# Held, not tapped: the cursor runs while the key is down.
+wtype -P Right; sleep 0.6; wtype -p Right; sleep 0.3
+key g;        expect alive  "g puts it down further along"
+key w;        expect alive  "w writes where it ended up"
 key Tab 1.5;  expect alive  "Tab flies the level"
 key Tab 1.2;  expect alive  "Tab comes back to editing"
 key f;        expect alive  "f flattens, leaving work unsaved"
@@ -145,6 +150,18 @@ if grep -q '^barnstormer-level 1' "$LVL" 2>/dev/null &&
     printf '  %-38s %s\n' "the editor wrote a level with a building" "ok"
 else
     printf '  %-38s FAILED\n' "the editor wrote a level with a building"
+    failures=$((failures + 1))
+fi
+step=$((step + 1))
+
+# It was placed with the cursor at 1500, so a building 16 wide landed at 1492.
+# Anything further right means the move tool carried it.
+placed=$(awk '/^target /{print $2; exit}' "$LVL" 2>/dev/null)
+if [[ -n $placed ]] && (( placed > 1492 )); then
+    printf '  %-38s %s\n' "the building moved where it was carried" "ok"
+else
+    printf '  %-38s FAILED (at %s)\n' "the building moved where it was carried" \
+           "${placed:-nothing}"
     failures=$((failures + 1))
 fi
 step=$((step + 1))

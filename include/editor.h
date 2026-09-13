@@ -38,6 +38,14 @@ typedef enum {
     ED_FIELD_AUTHOR,
 } edfield_t;
 
+/* What the cursor is carrying, if anything. */
+typedef enum {
+    ED_CARRY_NONE = 0,
+    ED_CARRY_TARGET,
+    ED_CARRY_RUNWAY,
+    ED_CARRY_OX,
+} edcarry_t;
+
 typedef struct {
     char name[LEVEL_NAME_MAX + 1];
     char author[LEVEL_NAME_MAX + 1];
@@ -57,6 +65,10 @@ typedef struct {
     int brush;                 /* terrain brush half-width, in columns     */
     edtool_t tool;
     int variant;               /* building kind, or runway orientation     */
+
+    edcarry_t carry;           /* what the cursor is carrying, if anything */
+    int carry_i;               /* its index in the array it lives in       */
+    level_point_t carry_home;  /* where it was picked up from              */
 
     edfield_t typing;          /* the field being typed, if any            */
     char typebuf[LEVEL_NAME_MAX + 1];
@@ -97,6 +109,26 @@ int editor_flatten(editor_t *ed);             /* the span, level with the
                                                  column under the cursor   */
 int editor_place(editor_t *ed);               /* per the current tool      */
 int editor_erase(editor_t *ed);               /* whatever is at the cursor */
+
+/* ---- moving something already placed ----------------------------------- */
+
+/* Pick up whatever is under the cursor, so that moving the cursor moves it.
+ * Returns 0, or -1 when there is nothing there.  What is carried keeps its
+ * place in the level's arrays, which matters: a building's index decides
+ * whose side it is on and a runway's decides who spawns there, so this is not
+ * the same thing as erasing it and putting down another.
+ *
+ * It stays a part of the level while it is carried, so it is still checked
+ * every step: move it somewhere it cannot go and it simply stays put while
+ * the cursor carries on, and catches up when the way is clear again. */
+int  editor_grab(editor_t *ed);
+void editor_drop(editor_t *ed);      /* leave it where it is    */
+void editor_ungrab(editor_t *ed);    /* put it back where it was */
+edcarry_t editor_carrying(const editor_t *ed);
+
+/* Where what is being carried sits, and how wide it is; width 0 when the
+ * cursor is carrying nothing. */
+void editor_carry_span(const editor_t *ed, int *x, int *w);
 
 /* ---- typing a name or an author ---------------------------------------- */
 

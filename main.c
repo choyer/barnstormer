@@ -309,6 +309,18 @@ int main(int argc, char **argv)
                     continue;
                 }
 
+                /* While something is being carried, only moving it, putting
+                 * it down and putting it back mean anything. */
+                if (editor_carrying(&editor) != ED_CARRY_NONE) {
+                    char ch = SWKEY_IS_CHAR(ev) ? SWKEY_CHAR(ev) : 0;
+                    if (ev == SWKEY_QUIT)
+                        editor_ungrab(&editor);
+                    else if (ev == SWKEY_ENTER || ch == ' ' ||
+                             ch == 'g' || ch == 'G')
+                        editor_drop(&editor);
+                    continue;
+                }
+
                 if (ev == SWKEY_TAB) {
                     game_start(&game, editor_level(&editor), mode, gamenum);
                     flying = true;
@@ -337,6 +349,7 @@ int main(int argc, char **argv)
                     case 'F': editor_flatten(&editor);    break;
                     case 'S': editor_smooth(&editor);     break;
                     case 'W': editor_save(&editor);       break;
+                    case 'G': editor_grab(&editor);       break;
                     case 'N': editor_type_begin(&editor, ED_FIELD_NAME);
                               break;
                     case 'A': editor_type_begin(&editor, ED_FIELD_AUTHOR);
@@ -666,6 +679,7 @@ int main(int argc, char **argv)
                     .dirty     = editor_dirty(&editor),
                     .t         = title_t++,
                 };
+                editor_carry_span(&editor, &v.carry_x, &v.carry_w);
                 render_edit(fb, &ctx, &v);
                 break;
             }

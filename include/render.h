@@ -130,6 +130,8 @@ typedef struct {
     const char *tool;
     const char *variant;         /* "" when the tool has only one         */
     const char *status;
+    int   carry_x, carry_w;      /* what the cursor is carrying; w 0 if   */
+                                 /* it is carrying nothing                */
     const char *typing;          /* field being typed, NULL when not      */
     const char *typing_text;
     bool  dirty;

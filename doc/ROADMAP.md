@@ -58,8 +58,10 @@ boards are scores made on the classic map.
 **The editor.** `barnstormer --edit FILE` opens a level, or starts one if the
 file is not there yet: a terrain brush (raise, lower, smooth, flatten), the
 four building types, runways and oxen, the level's name and author as typed
-text, and `Tab` to fly what you are looking at and `Tab` again to come back. The model is in `game/editor.c`, headless and
-tested (`tests/edittest.c`); the drawing is `render_edit()`.
+text, `g` to pick up something already placed and carry it somewhere else, and
+`Tab` to fly what you are looking at and `Tab` again to come back. The model
+is in `game/editor.c`, headless and tested (`tests/edittest.c`); the drawing
+is `render_edit()`.
 
 Its one rule is that the level under construction is always a level: every
 change is checked against `level_check()` -- the loader's own validation -- and
@@ -72,10 +74,17 @@ title screen's fourth row opens a picker over it: `level_list()` offers only
 the files that actually load, sorted by name, and says how many would not
 rather than hiding them.
 
-**What is missing.**
+Carrying obeys the same rule as everything else. What is picked up stays part
+of the level while it is carried, so it is checked every step: carry it
+somewhere it cannot go and it stays where it was while the cursor carries on,
+and it catches up when the way is clear. It keeps its index, too, which
+erasing and re-placing would not -- a building's index decides whose side it
+is on and a runway's decides who spawns there.
 
-* Moving something already placed, rather than erasing it and putting down
-  another.
+**Done.** The builder is finished as scoped here. What would extend it, if
+anyone wants it: more building types (the four are the original's), levels of
+a size other than 3000x200 (see the note in LEVEL_FORMAT.md about what that
+would take), and undo.
 
 **Sharing.** A level is one small text file — 6 KB for the classic level, the
 most detailed there is — so the sharing story is "send the file". A base64 form

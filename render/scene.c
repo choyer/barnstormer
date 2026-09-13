@@ -949,7 +949,21 @@ static void draw_cursor(framebuf_t *fb, const render_ctx_t *c,
 
     fb_rect(fb, cx, top, s, bottom - top, sw_palette[PAL_HUD_DIM]);
 
-    if (v->footprint > 0) {
+    if (v->carry_w > 0) {
+        /* What is being carried is already in the level and drawn there, so
+         * this only has to say which one it is. */
+        int h = baked[v->carry_x];
+        int x0 = screen_x(c, left, v->carry_x);
+        int y1 = screen_y(c, h);
+        int y0 = screen_y(c, h + 16);
+        int w = v->carry_w * s;
+        uint32_t col = sw_palette[PAL_TEAM1];
+
+        fb_rect(fb, x0, y0, w, s, col);
+        fb_rect(fb, x0, y1, w, s, col);
+        fb_rect(fb, x0, y0, s, y1 - y0, col);
+        fb_rect(fb, x0 + w - s, y0, s, y1 - y0, col);
+    } else if (v->footprint > 0) {
         /* A ghost of the footprint, sitting on the ground it will stand on. */
         int fx = v->cursor - v->footprint / 2;
         if (fx < 0) fx = 0;
@@ -1104,14 +1118,20 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
                 "ENTER KEEPS IT   ESC LEAVES IT AS IT WAS");
     } else if (mx < rx) {
         static const char *const hint[2] = {
-            "SPACE PLACE  BKSP ERASE  T TOOL  K KIND  N NAME  A AUTHOR",
+            "SPACE PLACE  BKSP ERASE  G MOVE  T TOOL  K KIND  N NAME  A AUTHOR",
             "ARROWS MOVE/RAISE  [ ] BRUSH  F FLAT  S SMOOTH  W WRITE  TAB FLY",
         };
         fb_text(fb, mx, gy, ts, sw_palette[PAL_HUD], v->status);
-        /* Dropped rather than run under the map when the window is narrow:
-         * half a line of keys is worse than none. */
+
+        /* Shrink the keys until they fit beside the map, and only give up on
+         * a line when even the smallest will not do.  Dropping a line while
+         * there is still room to make them smaller loses keys for nothing. */
+        int avail = rx - mx - 4 * ts;
+        while (hs > 1 && (fb_text_width(hs, hint[0]) > avail ||
+                          fb_text_width(hs, hint[1]) > avail))
+            hs--;
         for (int i = 0; i < 2; i++)
-            if (mx + fb_text_width(hs, hint[i]) < rx)
+            if (fb_text_width(hs, hint[i]) <= avail)
                 fb_text(fb, mx, gy + (i + 1) * rowh, hs,
                         sw_palette[PAL_HUD_DIM], hint[i]);
     }

@@ -247,6 +247,87 @@ int main(void)
        editor_erase(&ed) < 0 &&
        strstr(editor_status(&ed), "at least 2 runways"));
 
+    /* ---- moving something already placed ---- */
+
+    editor_new(&ed, path);
+    use(ED_TARGET, TARGET_HOUSE);
+    for (int i = 0; i < 3; i++) {
+        at(1000 + i * 100, 5);
+        editor_place(&ed);
+    }
+
+    at(2000, 5);
+    ok("there is nothing to pick up on empty ground",
+       editor_grab(&ed) < 0 && editor_carrying(&ed) == ED_CARRY_NONE);
+
+    at(1100, 5);
+    ok("a building can be picked up",
+       editor_grab(&ed) == 0 && editor_carrying(&ed) == ED_CARRY_TARGET);
+
+    editor_move(&ed, 300);
+    ok("and follows the cursor",
+       editor_level(&ed)->targets[1].x == 1400 - LEVEL_TARGET_WIDTH / 2);
+    ok("keeping its place in the level, which decides whose it is",
+       editor_level(&ed)->n_targets == 3 &&
+       editor_level(&ed)->targets[0].x == 1000 - LEVEL_TARGET_WIDTH / 2 &&
+       editor_level(&ed)->targets[2].x == 1200 - LEVEL_TARGET_WIDTH / 2);
+
+    editor_drop(&ed);
+    ok("putting it down leaves it there",
+       editor_carrying(&ed) == ED_CARRY_NONE &&
+       editor_level(&ed)->targets[1].x == 1400 - LEVEL_TARGET_WIDTH / 2);
+
+    at(1400, 5);
+    editor_grab(&ed);
+    editor_move(&ed, 500);
+    editor_ungrab(&ed);
+    ok("Esc puts it back where it came from",
+       editor_carrying(&ed) == ED_CARRY_NONE &&
+       editor_level(&ed)->targets[1].x == 1400 - LEVEL_TARGET_WIDTH / 2);
+
+    /* Carried into a place it cannot go: the level has to stay valid, so it
+     * stays where it was -- but the cursor must not get stuck with it. */
+    at(1400, 5);
+    editor_grab(&ed);
+    editor_move(&ed, -400);            /* onto the building at 1000 */
+    ok("it will not be carried onto another building",
+       editor_level(&ed)->targets[1].x == 1400 - LEVEL_TARGET_WIDTH / 2 &&
+       strstr(editor_status(&ed), "columns apart"));
+    ok("but the cursor keeps going", ed.cursor == 1000);
+    editor_move(&ed, -400);            /* on past it */
+    ok("and it catches up once the way is clear",
+       editor_level(&ed)->targets[1].x == 600 - LEVEL_TARGET_WIDTH / 2);
+    editor_drop(&ed);
+
+    /* A runway carried onto ground that is not flat enough for it. */
+    editor_new(&ed, path);
+    at(1500, 10);
+    editor_raise(&ed, 40);
+    at(410, 5);
+    ok("a runway can be picked up",
+       editor_grab(&ed) == 0 && editor_carrying(&ed) == ED_CARRY_RUNWAY);
+    int home = editor_level(&ed)->runways[0].x;
+    editor_move(&ed, 1080);            /* onto the edge of the hill */
+    ok("and will not be carried onto a slope",
+       editor_level(&ed)->runways[0].x == home &&
+       strstr(editor_status(&ed), "not flat"));
+    editor_ungrab(&ed);
+
+    /* An ox is carried along the ground rather than at a fixed height. */
+    editor_new(&ed, path);
+    use(ED_OX, 0);
+    at(1000, 5);
+    editor_place(&ed);
+    at(1500, 10);
+    editor_raise(&ed, 30);
+    at(1000, 5);
+    editor_grab(&ed);
+    editor_move(&ed, 500);
+    ok("an ox carried uphill stands on the ground when it arrives",
+       editor_level(&ed)->oxen[0].y ==
+           editor_level(&ed)->ground[editor_level(&ed)->oxen[0].x] + 16);
+    editor_drop(&ed);
+
     /* ---- naming it ---- */
 
     path_in(path, sizeof(path), "work.lvl");
@@ -350,7 +431,7 @@ int main(void)
             unsigned r = (rng >> 16) & 0xFFFF;
             int rc = 0;
 
-            switch (r % 9) {
+            switch (r % 11) {
             case 0: editor_move(&ed, (int)(r % 401) - 200); break;
             case 1: editor_brush(&ed, (int)(r % 21) - 10);  break;
             case 2: editor_tool(&ed, 1);                    break;
@@ -359,7 +440,14 @@ int main(void)
             case 5: rc = editor_smooth(&ed);                break;
             case 6: rc = editor_flatten(&ed);               break;
             case 7: rc = editor_place(&ed);                 break;
-            default: rc = editor_erase(&ed);                break;
+            case 8: rc = editor_grab(&ed);                  break;
+            case 9: (r & 1) ? editor_drop(&ed) : editor_ungrab(&ed); break;
+            default:
+                /* Erasing is ignored while something is carried, the way the
+                 * editor's keys ignore it. */
+                if (editor_carrying(&ed) == ED_CARRY_NONE)
+                    rc = editor_erase(&ed);
+                break;
             }
             rc < 0 ? refused++ : applied++;
 
