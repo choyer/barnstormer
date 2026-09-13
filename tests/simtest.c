@@ -138,6 +138,45 @@ static int determinism(void)
     return ok ? 0 : 1;
 }
 
+/* The clear-the-map counter has to come from the level, not from MAX_TARG:
+ * an authored level (doc/LEVEL_FORMAT.md) may carry fewer buildings, and a
+ * counter that starts above the number standing can never reach zero. */
+static int target_count(void)
+{
+    printf("%-28s ", "targets counted per level");
+    fflush(stdout);
+    int before = failures;
+
+    game_t *g = calloc(1, sizeof(*g));
+    game_start(g, &level_classic, PLAY_COMPUTER, 0);
+    check(g->numtarg[1] == level_classic.n_targets - 3,
+          "the classic level does not start with 17 enemy buildings", 0);
+    check(g->numtarg[0] == 0, "the player's own buildings are counted", 0);
+
+    /* The same level, truncated: twelve buildings, of which the three either
+     * side of centre are the player's. */
+    level_t small = level_classic;
+    small.n_targets = 12;
+    game_start(g, &small, PLAY_COMPUTER, 0);
+    check(g->numtarg[1] == 9, "a shorter level starts with the wrong count", 0);
+
+    /* A dogfight arena with no buildings at all must still start. */
+    level_t bare = level_classic;
+    bare.n_targets = 0;
+    game_start(g, &bare, PLAY_COMPUTER, 0);
+    check(g->numtarg[1] == 0, "an empty level starts with buildings to clear",
+          0);
+    for (unsigned t = 0; t < 200; t++) {
+        uint16_t keys[MAX_PLYR] = { 0 };
+        game_tick(g, keys);
+    }
+    verify(g, 200);
+    free(g);
+
+    printf("%s\n", failures == before ? "ok" : "FAILED");
+    return failures - before;
+}
+
 int main(void)
 {
     printf("barnstormer simulation soak test\n");
@@ -149,6 +188,7 @@ int main(void)
     soak("flying, novice",          PLAY_NOVICE,   0, 8000, true);
     soak("flying, single g7",       PLAY_SINGLE,   7, 8000, true);
     soak("long run, vs computer",   PLAY_COMPUTER, 0, 60000, true);
+    target_count();
     determinism();
 
     printf("%s (%d failures)\n", failures ? "FAILURES" : "all ok", failures);

@@ -47,27 +47,31 @@ immediate, and playable from inside the editor.
 **What already supports it.** `level_t` (`include/level.h`) is the only thing
 `game_start()` takes: a height field plus arrays of runways, buildings and
 oxen. `data/level_classic.c` is one of these and is not special-cased anywhere.
-`level_load()`, `level_save()` and `level_free()` are declared and currently
-fail with `ENOSYS`.
+The file format is specified in [LEVEL_FORMAT.md](LEVEL_FORMAT.md) and
+implemented: `level_load()`, `level_save()` and `level_free()` in
+`game/level.c`, with `level_error()` for the message to show whoever is editing
+the file. The classic level round-trips through disk to a byte-identical file
+and an identical 3000-tick replay hash (`tests/leveltest.c`).
 
 **What is missing.**
 
-* The file format, specified in [LEVEL_FORMAT.md](LEVEL_FORMAT.md), and the
-  two functions that read and write it.
 * An editor mode: `barnstormer --edit FILE`. It reuses `render_frame()` for the
   world view and adds
   - a terrain brush (raise/lower/smooth, with the 26..199 clamp the game
     already assumes),
   - placement of the four building types, the two runways and the oxen,
-  - validation (every runway needs 20 flat-ish columns; buildings need 16),
+  - validation (the loader's rules, applied live: a runway needs 21 columns
+    flat to within 4, buildings need 16 clear),
   - `Tab` to fly the level immediately and `Tab` again to return to editing.
 * A level directory (`$XDG_DATA_HOME/barnstormer/levels`) and a picker on the
   title screen.
 
-**Sharing.** A level is small — under 4 KB — so the sharing story is "send the
-file". A base64 form short enough to paste into a chat window is worth having;
-the format is designed so that gzip + base64 of a typical level fits in about
-two lines.
+**Sharing.** A level is one small text file — 6 KB for the classic level, the
+most detailed there is — so the sharing story is "send the file". A base64 form
+is still worth having for pasting into a chat window, though it is bigger than
+this document once guessed: gzipped and base64'd, the classic level is 32 lines
+at 76 columns rather than two. `level_hash()`, which peers compare before a
+networked game starts, is not written yet.
 
 **Ordering.** This should land before multiplayer: a shared level format is a
 prerequisite for peers agreeing on what world they are in.

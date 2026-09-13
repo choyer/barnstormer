@@ -131,11 +131,16 @@ TEST_BIN := $(BUILD)/simtest
 SCORE_TEST_SRC := tests/scoretest.c game/score.c
 SCORE_TEST_BIN := $(BUILD)/scoretest
 
+LEVEL_TEST_SRC := tests/leveltest.c game/level.c data/level_classic.c
+LEVEL_TEST_BIN := $(BUILD)/leveltest
+
 .PHONY: test
-test: $(TEST_BIN) $(SCORE_TEST_BIN)
+test: $(TEST_BIN) $(SCORE_TEST_BIN) $(LEVEL_TEST_BIN)
 	$(TEST_BIN)
 	@echo
 	$(SCORE_TEST_BIN)
+	@echo
+	$(LEVEL_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC) | $(PROTO_H)
 	@mkdir -p $(dir $@)
@@ -153,3 +158,8 @@ $(SCORE_TEST_BIN): $(SCORE_TEST_SRC)
 	@mkdir -p $(dir $@)
 	$(CC) -std=c11 $(WARN) -Iinclude -O1 -g -fsanitize=address,undefined \
 	    -o $@ $(SCORE_TEST_SRC)
+
+$(LEVEL_TEST_BIN): $(LEVEL_TEST_SRC)
+	@mkdir -p $(dir $@)
+	$(CC) -std=c11 $(WARN) -Iinclude -O1 -g -fsanitize=address,undefined \
+	    -o $@ $(LEVEL_TEST_SRC)

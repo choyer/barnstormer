@@ -139,9 +139,15 @@ static void init_targets(game_t *g)
     const level_t *lv = g->level;
 
     /* Single player: the three buildings either side of centre are the
-     * player's own; the rest belong to the enemy and must all be levelled. */
+     * player's own; the rest belong to the enemy and must all be levelled.
+     *
+     * Both counts are tallied as the buildings go up rather than assumed from
+     * MAX_TARG, because an authored level (doc/LEVEL_FORMAT.md) may carry
+     * fewer than twenty -- and a level whose counter starts higher than the
+     * number of buildings on it can never be cleared.  The player's own stay
+     * at zero: flattening them is allowed and costs nothing but the score. */
     g->numtarg[0] = 0;
-    g->numtarg[1] = MAX_TARG - 3;
+    g->numtarg[1] = 0;
 
     for (int i = 0; i < lv->n_targets && i < MAX_TARG; i++) {
         object_t *ob = obj_alloc(g);
@@ -175,6 +181,8 @@ static void init_targets(game_t *g)
         ob->owner = (i < MAX_TARG / 2 && i > MAX_TARG / 2 - 4)
                         ? &g->pool[0] : &g->pool[1];
         ob->clr = ob->owner->clr;
+        if (ob->owner == &g->pool[1])
+            g->numtarg[1]++;
         ob->symw = ob->symh = 16;
         ob->sprite_set = SPRITE_TARGET;
         obj_xinsert(g, ob);

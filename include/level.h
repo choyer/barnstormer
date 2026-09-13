@@ -6,9 +6,8 @@
  * built-in tables directly: game_start() takes a level_t, so a level editor
  * (doc/ROADMAP.md) only has to produce one of these structures.
  *
- * The on-disk format is specified in doc/LEVEL_FORMAT.md.  Loading and saving
- * are deliberately not implemented yet -- the stubs below exist so callers can
- * be written against the final API.
+ * The on-disk format is specified in doc/LEVEL_FORMAT.md and implemented in
+ * game/level.c.
  */
 #ifndef LEVEL_H
 #define LEVEL_H
@@ -25,12 +24,27 @@ enum {
     TARGET_HANGAR  = 3,   /* wide shed                                    */
 };
 
+/* Limits the loader enforces.  They are the shapes the simulation already
+ * assumes, not taste: the spawn tables index eight runway slots, game_t has
+ * room for MAX_TARG buildings and MAX_OXEN cattle, ground below 26 shows
+ * through the instrument band, and a building is 16 columns wide standing on
+ * a pad the game levels under it. */
+#define LEVEL_MAX_RUNWAYS   8
+#define LEVEL_MIN_RUNWAYS   2
+#define LEVEL_GROUND_MIN    26
+#define LEVEL_GROUND_MAX    (MAX_Y - 1)
+#define LEVEL_RUNWAY_SPAN   21          /* columns an aircraft rests on   */
+#define LEVEL_RUNWAY_SLOP   4           /* how uneven that strip may be   */
+#define LEVEL_TARGET_WIDTH  16
+#define LEVEL_NAME_MAX      63          /* bytes, name and author alike   */
+
 typedef struct { uint16_t x; uint8_t kind; } level_target_t;
 typedef struct { uint16_t x; uint8_t orient; } level_runway_t;
 typedef struct { uint16_t x, y; } level_point_t;
 
 typedef struct {
     const char *name;
+    const char *author;             /* may be NULL; not written if unset  */
     uint32_t format;
     uint16_t width, height;
     uint32_t rand_seed;
@@ -51,12 +65,29 @@ extern const level_t level_classic;
  * indexed three different tables here (inits/initc/initm in SWINIT.C). */
 int level_runway_slot(playmode_t mode, int player_index);
 
-/* ---- persistence (planned, see doc/LEVEL_FORMAT.md) -------------------- */
+/* ---- persistence (doc/LEVEL_FORMAT.md) --------------------------------- */
 
-/* Both return 0 on success and -1 with errno set on failure.  Neither is
- * implemented yet; they currently fail with ENOSYS. */
+/* All three return 0 on success and -1 with errno set on failure.
+ *
+ * level_load() allocates the level and everything it points at as one block;
+ * pass the result to level_free() and to nothing else.  A level that breaks
+ * one of the format's rules is refused with errno EINVAL rather than loaded
+ * half-valid.  level_free() refuses a pointer it did not hand out, so a
+ * built-in level like level_classic cannot be freed by accident.
+ *
+ * level_save() writes the canonical form -- no comments, terrain wrapped at a
+ * fixed width -- through a temporary file, so an interrupted write cannot
+ * truncate an existing level.  It refuses to write a level that would not
+ * load back.
+ *
+ * None of this is thread-safe; the game is single-threaded. */
 int level_load(const char *path, level_t **out);
 int level_free(level_t *lvl);
 int level_save(const char *path, const level_t *lvl);
+
+/* Why the last level_load() or level_save() failed, in a form worth showing
+ * to whoever is editing the file: "line 12: height 210 is outside 26..199".
+ * Empty until one of them fails, and valid until the next call. */
+const char *level_error(void);
 
 #endif /* LEVEL_H */
