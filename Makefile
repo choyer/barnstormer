@@ -139,6 +139,22 @@ LEVEL_TEST_BIN := $(BUILD)/leveltest
 EDIT_TEST_SRC := tests/edittest.c game/editor.c game/level.c game/paths.c
 EDIT_TEST_BIN := $(BUILD)/edittest
 
+# Measures what the flight model can do, for the level-design skill.  Not part
+# of `make test`: it prints numbers rather than passing or failing.
+PROBE_SRC := tests/flightprobe.c \
+             game/game.c game/move.c game/collision.c game/autopilot.c \
+             game/objects.c game/sound.c game/level.c game/net.c \
+             game/paths.c data/sprites.c
+PROBE_BIN := $(BUILD)/flightprobe
+
+# Flies a level file and says whether it can be flown out of, for the level
+# generator to check its own work.
+FLYTEST_SRC := tests/flytest.c \
+               game/game.c game/move.c game/collision.c game/autopilot.c \
+               game/objects.c game/sound.c game/level.c game/net.c \
+               game/paths.c data/sprites.c
+FLYTEST_BIN := $(BUILD)/flytest
+
 .PHONY: test
 test: $(TEST_BIN) $(SCORE_TEST_BIN) $(LEVEL_TEST_BIN) $(EDIT_TEST_BIN)
 	$(TEST_BIN)
@@ -170,6 +186,21 @@ $(LEVEL_TEST_BIN): $(LEVEL_TEST_SRC)
 	@mkdir -p $(dir $@)
 	$(CC) -std=c11 $(WARN) -Iinclude -O1 -g -fsanitize=address,undefined \
 	    -o $@ $(LEVEL_TEST_SRC)
+
+$(PROBE_BIN): $(PROBE_SRC)
+	@mkdir -p $(dir $@)
+	$(CC) -std=c11 $(WARN) -Iinclude -O2 -g -o $@ $(PROBE_SRC) -lm
+
+.PHONY: probe
+probe: $(PROBE_BIN)
+	$(PROBE_BIN)
+
+$(FLYTEST_BIN): $(FLYTEST_SRC)
+	@mkdir -p $(dir $@)
+	$(CC) -std=c11 $(WARN) -Iinclude -O2 -g -o $@ $(FLYTEST_SRC) -lm
+
+.PHONY: flytest
+flytest: $(FLYTEST_BIN)
 
 $(EDIT_TEST_BIN): $(EDIT_TEST_SRC)
 	@mkdir -p $(dir $@)

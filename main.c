@@ -94,6 +94,8 @@ static void usage(const char *argv0)
 "                        (doc/LEVEL_FORMAT.md); runs on it are not ranked\n"
 "  -e, --edit FILE       open FILE in the level editor, creating it if it\n"
 "                        is not there yet\n"
+"      --check FILE      say whether FILE is a level and exit, without\n"
+"                        opening a window\n"
 "\n"
 "Controls:\n"
 "  ,  pull up      /  dive        .  flip over\n"
@@ -126,6 +128,7 @@ int main(int argc, char **argv)
     const char *dump_path = NULL;
     const char *level_path = NULL;
     const char *edit_path = NULL;
+    const char *check_path = NULL;
     long dump_after = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -162,6 +165,8 @@ int main(int argc, char **argv)
         } else if ((!strcmp(a, "-e") || !strcmp(a, "--edit")) &&
                    i + 1 < argc) {
             edit_path = argv[++i];
+        } else if (!strcmp(a, "--check") && i + 1 < argc) {
+            check_path = argv[++i];
         } else if (!strcmp(a, "--dump-frame") && i + 1 < argc) {
             dump_path = argv[++i];
         } else if (!strcmp(a, "--dump-after") && i + 1 < argc) {
@@ -194,6 +199,30 @@ int main(int argc, char **argv)
                level->author ? " by " : "",
                level->author ? level->author : "",
                level_hash(level));
+    }
+
+    /* Answered before anything opens a window, so that it works over ssh, in
+     * a container, and in whatever a level generator is being driven from. */
+    if (check_path) {
+        level_t *lv = NULL;
+        if (level_load(check_path, &lv) < 0) {
+            fprintf(stderr, "%s: %s\n", check_path, level_error());
+            return 1;
+        }
+        int lo = LEVEL_GROUND_MAX, hi = 0;
+        for (int i = 0; i < lv->width; i++) {
+            if (lv->ground[i] < lo) lo = lv->ground[i];
+            if (lv->ground[i] > hi) hi = lv->ground[i];
+        }
+        printf("%s: ok [%08x]  \"%s\"%s%s\n", check_path, level_hash(lv),
+               lv->name, lv->author ? " by " : "",
+               lv->author ? lv->author : "");
+        printf("  terrain %d..%d   %d runway%s  %d building%s  %d ox%s\n",
+               lo, hi, lv->n_runways, lv->n_runways == 1 ? "" : "s",
+               lv->n_targets, lv->n_targets == 1 ? "" : "s",
+               lv->n_oxen, lv->n_oxen == 1 ? "" : "en");
+        level_free(lv);
+        return 0;
     }
 
     /* The editor holds its own working copy; --edit wins if both are given,
