@@ -30,6 +30,8 @@ KINDS = {"house": 0, "factory": 1, "fuel": 2, "hangar": 3}
 TAKEOFF_RUN = 103          # columns before the wheels leave the ground
 TAKEOFF_CLEAR = 137        # columns before it is above building height
 CORRIDOR = 170             # what the original leaves clear ahead of a field
+EDGE_WIDTH = 140           # the wall at each end of the world
+EDGE_PEAK = 186            # high enough that it reads as the end, not a hill
 FREE_AIR = 130             # ground above this leaves no room to turn round
 WALL = 160                 # ground above this is a wall, not scenery
 
@@ -56,7 +58,8 @@ class Rng:
 
 def parse(path):
     rec = {"name": None, "author": None, "seed": 7491,
-           "land": [], "fields": [], "buildings": [], "oxen": []}
+           "land": [], "fields": [], "buildings": [], "singles": [],
+           "oxen": []}
 
     for n, raw in enumerate(open(path), 1):
         line = raw.split("#", 1)[0].strip()
@@ -80,6 +83,8 @@ def parse(path):
                 rec["fields"].append((n, first, opts))
             elif word == "buildings":
                 rec["buildings"].append((n, opts))
+            elif word == "building":
+                rec["singles"].append((n, opts))
             elif word == "ox":
                 rec["oxen"].append((n, opts))
             else:
@@ -166,7 +171,27 @@ def build_terrain(land, rng):
         g = [g[0]] + [(g[i - 1] + g[i] + g[i + 1]) / 3 for i in
                       range(1, len(g) - 1)] + [g[-1]]
 
-    return [max(GROUND_MIN, min(GROUND_MAX, int(round(v)))) for v in g]
+    g = [max(GROUND_MIN, min(GROUND_MAX, int(round(v)))) for v in g]
+    return add_edges(g)
+
+
+def add_edges(g):
+    """Wall off both ends of the world.
+
+    The world stops at column 0 and column 3000 and an aeroplane that reaches
+    either just sits there against nothing.  A steep rise at each end says so
+    in the only language the game has: you can see it coming, and there is
+    visibly nothing beyond it.
+    """
+    for i in range(EDGE_WIDTH):
+        inner = g[EDGE_WIDTH]
+        g[i] = int(round(blend(i, EDGE_PEAK, inner, EDGE_WIDTH)))
+
+        j = MAX_X - 1 - i
+        inner = g[MAX_X - 1 - EDGE_WIDTH]
+        g[j] = int(round(blend(i, EDGE_PEAK, inner, EDGE_WIDTH)))
+
+    return [max(GROUND_MIN, min(GROUND_MAX, v)) for v in g]
 
 
 # ---- fields --------------------------------------------------------------
@@ -210,6 +235,11 @@ def place_fields(ground, fields):
             x = at + i * (RUNWAY_SPAN + 29) * (1 if who == "player" else -1)
             xs.append(max(0, min(MAX_X - RUNWAY_SPAN - 1, x)))
 
+        if min(xs) < EDGE_WIDTH + 20 or max(xs) > MAX_X - EDGE_WIDTH - 60:
+            raise Fail(f"the {who} field at {at} is in the wall at the end of "
+                       f"the world; keep fields between {EDGE_WIDTH + 20} and "
+                       f"{MAX_X - EDGE_WIDTH - 80}")
+
         lo, hi = min(xs) - 8, max(xs) + RUNWAY_SPAN + 8
         span = [orig[i] for i in range(max(0, lo), min(MAX_X, hi))]
         pad = sorted(span)[len(span) // 2]
@@ -235,8 +265,53 @@ def place_fields(ground, fields):
 
 # ---- buildings and cattle ------------------------------------------------
 
-def place_buildings(groups, runways):
-    """Space each group out, keeping clear of the strips.
+def cluster_positions(lo, hi, count, rng):
+    """Where a group of buildings actually goes.
+
+    Evenly spacing them reads as fence posts: one structure right next to
+    another, all the way across the map.  Real installations come in twos and
+    threes with open ground between them, which also gives a pilot somewhere
+    to make a second pass from.
+    """
+    if count <= 1:
+        return [lo]
+
+    sizes, left = [], count
+    while left > 0:
+        n = 2 + (rng.next() % 3)              # clusters of two to four
+        if left - n == 1:                     # never leave a lone straggler
+            n = left
+        n = min(n, left)
+        sizes.append(n)
+        left -= n
+
+    # A pitch per cluster, not one for the whole map: buildings the same
+    # distance apart all the way across read as a fence however they are
+    # grouped.  Sixteen wide plus half as much again, at least.
+    pitches = [TARGET_WIDTH + 16 + rng.next() % 12 for _ in sizes]
+    inside = sum((n - 1) * p for n, p in zip(sizes, pitches))
+    gaps = len(sizes) - 1
+    room = hi - lo
+
+    if room < inside + gaps * 70:
+        raise Fail(f"{count} buildings between {lo} and {hi} do not fit as "
+                   f"{len(sizes)} clusters with room between them; give them "
+                   f"{inside + gaps * 70 + 40} columns, or ask for fewer")
+
+    slack = room - inside
+    share = slack / (gaps + 1) if gaps else slack
+    out, x = [], float(lo)
+    for i, (n, pitch) in enumerate(zip(sizes, pitches)):
+        for k in range(n):
+            out.append(int(x + k * pitch))
+        x += (n - 1) * pitch
+        if i < gaps:
+            x += share * (0.7 + 0.6 * ((rng.next() % 100) / 100.0))
+    return out
+
+
+def place_buildings(groups, singles, runways):
+    """Space each group out, keeping clear of the strips and the ends.
 
     The order of the output is not cosmetic: the game gives the player the
     buildings at index 7, 8 and 9 and the enemy all the rest, so the player's
@@ -264,43 +339,54 @@ def place_buildings(groups, runways):
         return None
 
     out = {"player": [], "enemy": []}
+
+    for n, o in singles:
+        owner = o.get("owner")
+        if owner not in out:
+            raise Fail(f"line {n}: a building needs owner=player or "
+                       f"owner=enemy")
+        if "at" not in o:
+            raise Fail(f"line {n}: a building needs at=")
+        kind = KINDS.get(o.get("kind", "house"))
+        if kind is None:
+            raise Fail(f"line {n}: {o.get('kind')!r} is not a building kind")
+        out[owner].append((int(o["at"]), kind))
+
     for n, o in groups:
         owner = o.get("owner")
         if owner not in out:
             raise Fail(f"line {n}: buildings need owner=player or owner=enemy")
         try:
             lo, hi, count = int(o["from"]), int(o["to"]), int(o["count"])
-        except KeyError as e:
+        except KeyError:
             raise Fail(f"line {n}: buildings need from= to= count=")
         kinds = [KINDS[k] for k in o.get("kinds", "house,factory").split(",")
                  if k in KINDS] or [0]
-
         if count < 1:
             continue
-        step = (hi - lo) / count if count > 1 else 0
-        if count > 1 and step < TARGET_WIDTH + 8:
-            raise Fail(f"line {n}: {count} buildings between {lo} and {hi} "
-                       f"leaves {step:.0f} columns each; they need "
-                       f"{TARGET_WIDTH + 8}")
-        for i in range(count):
-            x = int(lo + i * step)
-            for nudge in range(0, 60, 4):        # step aside for a strip
-                if clear_of_runways(x + nudge):
-                    x += nudge
-                    break
-            else:
-                raise Fail(f"line {n}: no room for a building near {x}")
 
+        rng = Rng(lo * 7919 + hi * 104729 + count)
+        for i, x in enumerate(cluster_positions(lo, hi, count, rng)):
+            out[owner].append((x, kinds[i % len(kinds)]))
+
+    # Everything, checked where it ended up.
+    for owner, items in out.items():
+        for x, _ in items:
+            if x < EDGE_WIDTH or x + TARGET_WIDTH > MAX_X - EDGE_WIDTH:
+                raise Fail(f"a building at {x} is inside the wall at the end "
+                           f"of the world; keep buildings between "
+                           f"{EDGE_WIDTH} and {MAX_X - EDGE_WIDTH}")
+            if not clear_of_runways(x):
+                raise Fail(f"a building at {x} stands on a runway")
             blocked = in_takeoff_path(x)
             if blocked is not None:
                 raise Fail(
-                    f"line {n}: a building at {x} stands in the take-off path "
-                    f"of the field at {blocked}. An aeroplane needs "
-                    f"{TAKEOFF_CLEAR} columns to climb over building height, "
-                    f"and the classic map leaves {CORRIDOR}. Put these "
-                    f"buildings behind the field instead, or start the group "
-                    f"beyond column {blocked + CORRIDOR}")
-            out[owner].append((x, kinds[i % len(kinds)]))
+                    f"a building at {x} stands in the take-off path of the "
+                    f"field at {blocked}. An aeroplane needs {TAKEOFF_CLEAR} "
+                    f"columns to climb over building height, and the classic "
+                    f"map leaves {CORRIDOR}. Put these buildings behind the "
+                    f"field instead, or start the group beyond column "
+                    f"{blocked + CORRIDOR}")
 
     enemy, player = out["enemy"], out["player"]
     if len(enemy) + len(player) > MAX_TARGETS:
@@ -394,7 +480,8 @@ def lint(ground, runways, targets, n_player):
     """Things that load and fly but make a poor level."""
     say = []
 
-    peak = max(ground)
+    inland = ground[EDGE_WIDTH:MAX_X - EDGE_WIDTH]
+    peak = max(inland)
     if peak > WALL:
         say.append(f"the highest ground is {peak}; above {WALL} is a wall "
                    f"the aeroplane can barely get over")
@@ -459,7 +546,8 @@ def main():
         rng = Rng(rec["seed"])
         ground = build_terrain(rec["land"], rng)
         runways = place_fields(ground, rec["fields"])
-        targets, n_player = place_buildings(rec["buildings"], runways)
+        targets, n_player = place_buildings(rec["buildings"], rec["singles"],
+                                            runways)
         oxen = place_oxen(ground, rec["oxen"])
     except Fail as e:
         print(f"{args.recipe}: {e}", file=sys.stderr)

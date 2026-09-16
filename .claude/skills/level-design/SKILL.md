@@ -60,12 +60,31 @@ what the aeroplane can do. The four that matter most:
    look tall — it takes the air away. Nothing can turn round above 130.
 4. **Slope is never the limit.** The aeroplane out-climbs any gradient the
    terrain can have, so shape the land for interest, not for gentleness.
+5. **Both ends of the world are walled off**, automatically, by a steep rise
+   over the outer 140 columns. The world simply stops at column 0 and column
+   3000 and an aeroplane that reaches either just sits there against nothing;
+   a wall says so in the only language the game has. Keep fields and
+   buildings between **140 and 2860** — the generator refuses anything inside
+   the walls.
 
 ## Making terrain that is worth flying
 
 Vary the scale: two or three big landforms across the map, medium undulation
 inside them, and a little roughness on top (`rough=3` is plenty; `rough=8` is
 a moonscape). Flat ground only where something stands on it.
+
+Avoid one long progression from one end to the other. A level that rises
+steadily west to east is read in a single glance and flown the same way every
+time; break it with something that interrupts the trend — a dip behind the
+high ground, a knoll on the flat, a shelf half way up — so there is more than
+one way to approach the far end.
+
+`levelgen.py` places a group of buildings in **clusters of two to four with
+open ground between**, rather than at an even spacing, because a row of
+evenly spaced structures reads as fence posts and gives a pilot nowhere to
+turn between passes. Use several `buildings` groups when you want distinct
+installations, and `building owner=... at=... kind=...` to put one exactly
+where you want it.
 
 Give the map two or three things a pilot would name — a pass to thread, a bowl
 to dive into, a ridge to come over with the sun behind you. A level that is

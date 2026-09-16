@@ -14,11 +14,11 @@ land valley   width=420  floor=34
 land ridge    width=520  peak=124 rough=4
 land plain    width=940  h=48
 
-field player at=420  facing=right
-field enemy  at=2580 facing=left
+field player at=480  facing=right
+field enemy  at=2620 facing=left
 
-buildings owner=player from=80   to=300  count=3  kinds=house,factory
-buildings owner=enemy  from=1180 to=2200 count=17 kinds=factory,fuel,hangar,house
+buildings owner=player from=170  to=360  count=3  kinds=house,factory
+buildings owner=enemy  from=1180 to=2280 count=17 kinds=factory,fuel,hangar,house
 
 ox at=1500
 ox at=1560
