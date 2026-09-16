@@ -23,3 +23,9 @@ Everything else -- design rationale, invariants that must not be broken,
 hard-won findings about the compositor or the desktop, notes for whoever picks
 a feature up next -- belongs in this directory, added to the file above whose
 subject it shares, or to a new one when the subject is genuinely new.
+
+One directory is not design notes and does not live here: `../agent/` holds
+skills -- instructions and tools written to be followed, by a person or by an
+agent, rather than read for background. `agent/README.md` says how to consume
+one. They carry their own versions and declare which map format and which
+game build they need, so they are released independently of the game.

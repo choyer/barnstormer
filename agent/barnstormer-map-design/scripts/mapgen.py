@@ -7,18 +7,28 @@ and this works out the 3000 columns, the slot order and the ownership order --
 the parts that are tedious to do by hand and easy to get subtly wrong.
 
     mapgen.py mountain-pass.recipe -o mountain-pass.map
+    mapgen.py mountain-pass.recipe -o out.map --json    # for a program
 
 Output is the same canonical form map_save() writes, so a map that comes
-back out of the editor differs only where it was edited.
+back out of the editor differs only where it was edited.  It does not depend
+on this script's options: --quiet and --json change what is printed, never
+what is written.
+
+Exit status is 0 when the map was written, 1 when the recipe is wrong (the
+reason goes to stderr, and to the "error" field under --json), 2 for usage.
 
 See references/recipe.md for the vocabulary and references/rules.md for why
 the rules are what they are.
 """
 import argparse
+import json as _json
 import math
 import os
 import re
 import sys
+
+VERSION = "1.0.0"          # this skill's version; see ../manifest.json
+MAP_FORMAT_VERSION = 1     # what the generated file declares in its header
 
 MAX_X, MAX_Y = 3000, 200
 GROUND_MIN, GROUND_MAX = 26, 199
@@ -26,7 +36,7 @@ RUNWAY_SPAN, TARGET_WIDTH = 21, 16
 MAX_RUNWAYS, MAX_TARGETS, MAX_OXEN = 8, 20, 2
 KINDS = {"house": 0, "factory": 1, "fuel": 2, "hangar": 3}
 
-# Measured with `make probe`; see references/flight-envelope.md.
+# Measured with `make probe`; see references/rules.md.
 TAKEOFF_RUN = 103          # columns before the wheels leave the ground
 TAKEOFF_CLEAR = 137        # columns before it is above building height
 CORRIDOR = 170             # what the original leaves clear ahead of a field
@@ -538,7 +548,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("recipe")
     ap.add_argument("-o", "--out", help="where to write the .map")
-    ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--quiet", action="store_true",
+                    help="write the map and print nothing")
+    ap.add_argument("--json", action="store_true",
+                    help="print one JSON object instead, for a program: the "
+                         "path written, the counts, the profile and the "
+                         "notes -- or an error field and exit 1")
+    ap.add_argument("--version", action="version",
+                    version=f"mapgen {VERSION} "
+                            f"(map format {MAP_FORMAT_VERSION})")
     args = ap.parse_args()
 
     try:
@@ -550,19 +568,46 @@ def main():
                                             runways)
         oxen = place_oxen(ground, rec["oxen"])
     except Fail as e:
+        if args.json:
+            _json.dump({"ok": False, "recipe": args.recipe,
+                        "error": str(e)}, sys.stdout)
+            print()
         print(f"{args.recipe}: {e}", file=sys.stderr)
         return 1
 
     out = args.out or os.path.splitext(args.recipe)[0] + ".map"
     runs = write_map(out, rec, ground, runways, targets, oxen)
+    notes = lint(ground, runways, targets, n_player)
 
-    if not args.quiet:
+    if args.json:
+        _json.dump({
+            "ok": True,
+            "generator": VERSION,
+            "map_format_version": MAP_FORMAT_VERSION,
+            "recipe": args.recipe,
+            "map": out,
+            "name": rec["name"],
+            "author": rec["author"] or None,
+            "seed": rec["seed"],
+            "terrain_runs": runs,
+            "runways": len([r for r in runways if r]),
+            "buildings": len(targets),
+            "player_buildings": n_player,
+            "oxen": len(oxen),
+            "ground_min": min(ground),
+            "ground_max": max(ground),
+            "notes": notes,
+            "profile": profile(ground, runways, targets, oxen),
+            "verify": "scripts/verify.sh " + out,
+        }, sys.stdout, indent=2)
+        print()
+    elif not args.quiet:
         print(profile(ground, runways, targets, oxen))
         print()
         print(f"{out}: {rec['name']}, {runs} terrain runs, "
               f"{len([r for r in runways if r])} runways, {len(targets)} "
               f"buildings ({n_player} the player's), {len(oxen)} oxen")
-        for w in lint(ground, runways, targets, n_player):
+        for w in notes:
             print(f"  note: {w}")
     return 0
 

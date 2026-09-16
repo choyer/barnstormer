@@ -18,6 +18,7 @@ tools/       the extractors that regenerate data/, and release helpers
 packaging/   PKGBUILD and the standalone install script
 tests/       the headless suites and the UI flow script
 doc/         design notes and the plans for what comes next
+agent/       harness-agnostic skills; see agent/README.md
 ```
 
 ## The seam

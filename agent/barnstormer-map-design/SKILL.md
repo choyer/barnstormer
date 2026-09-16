@@ -1,6 +1,12 @@
 ---
-name: map-design
-description: Design and generate Barnstormer map files (.map) from a description - terrain, airfields, buildings and cattle. Use when asked to make, generate, design or fix a map, landscape or terrain for Barnstormer/Sopwith, or when editing a .map or .recipe file. Handles the file format, the placement rules the game does not document, and checking that what comes out can actually be flown.
+id: barnstormer-map-design
+name: barnstormer-map-design
+version: 1.0.0
+description: Design and generate Barnstormer map files (.map) from a text recipe - terrain, airfields, buildings and cattle. Use when asked to make, generate, design or fix a map, landscape or terrain for Barnstormer/Sopwith, or when editing a .map or .recipe file. Handles the file format, the placement rules the game does not document, and checking that what comes out can actually be flown.
+entrypoint: SKILL.md
+manifest: manifest.json
+produces: .map files, map format version 1
+license: same as the repository
 ---
 
 # Designing a Barnstormer map
@@ -14,6 +20,28 @@ So: **describe the map in a recipe, generate it, and check the result by
 flying it.** Do not write the 3000 columns by hand, and do not hand-edit the
 terrain in a `.map` file — regenerate from the recipe instead.
 
+This file is the whole instruction set; nothing here depends on a particular
+agent, editor or harness. `manifest.json` is the same thing in machine-readable
+form, for a consumer that wants to discover the tools without reading prose.
+
+## What you need
+
+| Thing | How it is found | If it is missing |
+|---|---|---|
+| `python3` ≥ 3.8 | `PATH` | nothing works; the generator is pure stdlib |
+| `barnstormer` | `$BARNSTORMER`, else `./build/barnstormer`, else `PATH` | `make` in the repository root |
+| `flytest` | `$FLYTEST`, else `./build/flytest`, else `PATH` | `make flytest` |
+
+`$SKILL` below means this directory. Nothing is installed and nothing is
+written outside the map you ask for, so the skill can be copied out of the
+repository and pointed at a built game elsewhere:
+
+```bash
+SKILL=/path/to/agent/barnstormer-map-design
+BARNSTORMER=/usr/local/bin/barnstormer
+FLYTEST=~/src/barnstormer/build/flytest
+```
+
 ## The loop
 
 ```bash
@@ -21,29 +49,49 @@ terrain in a `.map` file — regenerate from the recipe instead.
 $EDITOR mountain-pass.recipe
 
 # 2. generate -- prints an elevation profile and any notes
-python3 .claude/skills/map-design/scripts/mapgen.py mountain-pass.recipe \
+python3 "$SKILL/scripts/mapgen.py" mountain-pass.recipe \
         -o ~/.local/share/barnstormer/maps/mountain-pass.map
 
-# 3. check it is a map at all (no window; exit 1 and a line number if not)
-./build/barnstormer --check ~/.local/share/barnstormer/maps/mountain-pass.map
-
-# 4. fly it -- the only thing that catches an unflyable field
-make flytest && ./build/flytest ~/.local/share/barnstormer/maps/mountain-pass.map
+# 3. check it is a valid map, and that it can be flown out of
+"$SKILL/scripts/verify.sh" ~/.local/share/barnstormer/maps/mountain-pass.map
 ```
 
-All four have to pass. `--check` says whether the file is *valid*; `flytest`
-says whether it is *playable*, which is a different question and the one that
-catches real mistakes. It flies the player off the deck and lets the game's
-own autopilot try the other fields; every aeroplane that tries must get away.
+Both steps have to pass. `verify.sh` runs the two questions that matter and
+returns one status: `barnstormer --check` says whether the file is *valid*,
+and `flytest` says whether it is *playable*, which is a different question and
+the one that catches real mistakes. It flies the player off the deck and lets
+the game's own autopilot try the other fields; every aeroplane that tries must
+get away.
 
 Then hand it over: `barnstormer` and pick it from **Play Map** on the title
 screen, or `barnstormer --map FILE` to go straight there.
+
+### Driving it from a program
+
+Both tools take `--json`, so an agent does not have to parse prose:
+
+```bash
+python3 "$SKILL/scripts/mapgen.py" r.recipe -o out.map --json
+# {"ok": true, "map": "out.map", "buildings": 20, "player_buildings": 3,
+#  "notes": [...], "profile": "...", "verify": "scripts/verify.sh out.map"}
+
+"$SKILL/scripts/verify.sh" --json out.map
+# {"map":"out.map","ok":true,"valid":true,"flyable":true,"check":"...","fly":"..."}
+```
+
+Exit codes are the contract: `mapgen.py` returns 0 written, 1 the recipe is
+wrong (reason on stderr and in `error`), 2 usage. `verify.sh` returns 0 valid
+and flyable, 1 not, 2 the binaries could not be found — which is a different
+thing from a bad map and should be reported as such rather than retried.
+
+`notes` are lint, not errors: a map with notes is still written and may still
+be fine. Read them before handing the map over.
 
 ## What makes a map good rather than merely valid
 
 Read `references/rules.md` before generating anything — it has the placement
 rules the game enforces but does not write down, and the measured limits of
-what the aeroplane can do. The four that matter most:
+what the aeroplane can do. The five that matter most:
 
 1. **Keep 170 columns clear in front of every airfield.** An aeroplane needs
    103 columns to leave the ground and 137 to climb over building height. A
@@ -120,10 +168,30 @@ lowers ground, `Tab` flies what is on the screen. Anything changed there is
 lost the next time the recipe is regenerated, so once a map has been edited
 by hand, edit it by hand from then on.
 
+## Versions and compatibility
+
+This skill is versioned separately from the game (`version:` above and in
+`manifest.json`). What binds it to a release is not the game's version number
+but two things it declares:
+
+* **The map format version it writes** — 1, the format in
+  `doc/MAP_FORMAT.md`. A map written for format 1 loads in any build that
+  reads format 1.
+* **The minimum game it needs** — 1.4.0, because that is where the header
+  token became `barnstormer-map` and the data directory became `maps/`.
+  Older builds wrote and read `barnstormer-level`.
+
+So: a change to the recipe vocabulary or to the generator's judgement is a
+version bump here and nothing in the game; a change to the map format is a
+bump in both, and `MAP_FORMAT_VERSION` in `scripts/mapgen.py` is the line
+that has to move with it.
+
 ## Files
 
+- `manifest.json` — the same description, machine-readable
 - `references/recipe.md` — the recipe vocabulary, with examples
 - `references/rules.md` — the format, the undocumented game rules, and the
   measured flight envelope
 - `scripts/mapgen.py` — recipe to `.map`, with the profile and the notes
-- `examples/mountain-pass.recipe` — a worked example that passes all four steps
+- `scripts/verify.sh` — valid and flyable, in one command and one exit status
+- `examples/mountain-pass.recipe` — a worked example that passes both steps

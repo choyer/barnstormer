@@ -108,9 +108,16 @@ as a hill worth crossing.
 ## Checking a map
 
 ```bash
-./build/barnstormer --check MAP        # is it a map?        (no window)
-./build/flytest MAP                    # can it be flown?    (no window)
+scripts/verify.sh MAP                  # both questions, one exit status
+
+# or the two tools separately, which is what verify.sh runs:
+barnstormer --check MAP                # is it a map?        (no window)
+flytest MAP                            # can it be flown?    (no window)
 ```
+
+`verify.sh` finds the binaries through `$BARNSTORMER` and `$FLYTEST`, then the
+repository's `build/`, then `PATH`, and exits 2 rather than 1 when it cannot
+find them -- a missing tool is not a bad map.
 
 `flytest` starts a real game against the computer, flies the player off the
 deck and lets the game's own autopilot try the other fields. Every aeroplane
