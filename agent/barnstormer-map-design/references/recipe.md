@@ -5,7 +5,7 @@ a comment. Order matters only for `land`, which is laid out left to right.
 
 ```
 name    Mountain Pass
-author  carl
+author  CRH
 seed    4718
 
 land plain   width=520 h=44

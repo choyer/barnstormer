@@ -388,18 +388,18 @@ int main(void)
     /* ---- and its author ---- */
 
     editor_type_begin(&ed, ED_FIELD_AUTHOR);
-    for (const char *p2 = "carl"; *p2; p2++)
+    for (const char *p2 = "CRH"; *p2; p2++)
         editor_type_char(&ed, *p2);
     ok("an author can be typed",
        editor_type_end(&ed, true) == 0 &&
        editor_map(&ed)->author &&
-       !strcmp(editor_map(&ed)->author, "carl"));
+       !strcmp(editor_map(&ed)->author, "CRH"));
 
     ok("name and author survive a save and a load", editor_save(&ed) == 0 && ({
         map_t *back = NULL;
         bool good = map_load(path, &back) == 0 && back &&
                     !strcmp(back->name, "Spaced Out") &&
-                    back->author && !strcmp(back->author, "carl");
+                    back->author && !strcmp(back->author, "CRH");
         if (back)
             map_free(back);
         good;

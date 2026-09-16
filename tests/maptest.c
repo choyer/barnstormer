@@ -214,7 +214,7 @@ int main(void)
           "barnstormer-map 1\n"
           "\n"
           "name  Bridge Too Far  \n"
-          "author carl\n"
+          "author CRH\n"
           "seed 12345\n"
           "size 3000 200\n"
           "wingspan 12\n"                 /* unknown key: skipped */
@@ -232,7 +232,7 @@ int main(void)
     if (lv) {
         ok("the name is trimmed, inner spaces kept",
            !strcmp(lv->name, "Bridge Too Far"));
-        ok("the author is read", lv->author && !strcmp(lv->author, "carl"));
+        ok("the author is read", lv->author && !strcmp(lv->author, "CRH"));
         ok("ground lines concatenate", lv->ground[0] == 100 &&
            lv->ground[2999] == 100);
         ok("the seed is read", lv->rand_seed == 12345);
@@ -241,7 +241,7 @@ int main(void)
         path_in(other, sizeof(other), "hand2.map");
         ok("it saves with the author intact", map_save(other, lv) == 0);
         char *txt = slurp(other, NULL);
-        ok("which is on its own line", txt && strstr(txt, "\nauthor carl\n"));
+        ok("which is on its own line", txt && strstr(txt, "\nauthor CRH\n"));
         ok("and no comments are written", txt && !strchr(txt, '#'));
         free(txt);
         map_free(lv);

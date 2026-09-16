@@ -22,7 +22,7 @@ written before the rename still load; it is never written back.
 ```
 barnstormer-map 1
 name Bridge Too Far
-author carl
+author CRH
 seed 7491
 size 3000 200
 

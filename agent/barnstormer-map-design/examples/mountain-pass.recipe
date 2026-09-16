@@ -5,7 +5,7 @@
 # front of it.  An aeroplane needs 137 columns to climb over building height
 # and the classic map leaves 170 clear ahead of each strip.
 name Mountain Pass
-author carl
+author CRH
 seed 4718
 
 land plain    width=520  h=44

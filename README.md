@@ -55,7 +55,7 @@ barnstormer --map salt-flats.map  # fly a map file instead of the classic one
 barnstormer --help
 ```
 
-It prints the map's name and a short hash (`flying "Salt Flats" by carl
+It prints the map's name and a short hash (`flying "Salt Flats" by CRH
 [ebae6cce]`) — two people can compare those to be sure they are flying the
 same map, and the editor prints the same hash when it writes a file.
 
