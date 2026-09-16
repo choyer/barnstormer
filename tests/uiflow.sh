@@ -13,7 +13,7 @@
 # only gets there by walking the whole path.
 #
 # Not part of `make test`: it needs a compositor and takes the keyboard for
-# about fifteen seconds. Run it with `make test-ui`.
+# about three quarters of a minute. Run it with `make test-ui`.
 #
 # Scores are written to a throwaway XDG_DATA_HOME, never your real board.
 

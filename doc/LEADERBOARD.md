@@ -50,6 +50,38 @@ enemy pilots respawn unconditionally at +50 each.
   the higher slot.
 - The tenth entry drops off.
 
+## A best per map, instead of a board per map
+
+A board is a comparison between runs on **one fixed world**, so only the
+classic map reaches one: `game_ranked()` tests `g->map == &map_classic`, and a
+run on an authored map is shown with `NOT RANKED`. A map with four buildings
+and no enemy would otherwise top every board without meaning anything.
+
+What such a run gets instead is a personal best per map -- one number, no
+initials, nothing to compete against but yourself, so there is nothing to farm
+by writing an easy map:
+
+- **Keyed by `map_hash()`**, not by filename, so two copies of a map share a
+  best and an edited map is a different map. `map_list()` records the hash
+  while it already has the map open for validation, which is what lets the
+  picker show the column without a second load.
+- **`SCORE_BESTS` is 64.** Past that the least recently beaten makes way:
+  beating a map moves it to the back of the queue, a new map evicts the
+  front, and the file is written in that order so the rule needs no
+  timestamps.
+- **Only a completed run counts** (`game_completed()`: crashed out or
+  retired), and only a positive score. Bailing out forfeits a best exactly as
+  it forfeits a rank.
+- Shown in the **BEST** column of the map picker, and on the end-of-run screen
+  as `YOUR BEST ON THIS MAP n` when the run did not rank -- otherwise a best
+  set on your own map would be invisible at the moment you set it.
+
+Alternatives considered and rejected: a ten-entry board per map (keys fine, but
+it loses the single fixed world the numbers mean something against, and needs
+eviction rules and a UI to pick which board), and normalising scores by a
+difficulty estimate (unsound -- difficulty is not measurable from the file, and
+any formula becomes the thing to game).
+
 ## Entering initials
 
 Three cells, **A-Z and space**, blinking caret on the active cell.
@@ -108,17 +140,27 @@ needs a home, it goes somewhere else, or the scores move to
 ```
 # barnstormer scores v1
 LAST CRH
-COMPUTER DHH 64850
-COMPUTER CRH 52300
+DIALS 0
+NOVICE DLC 15225
 ...
 SINGLE CRH 12400
 ...
-NOVICE DLC 15225
+COMPUTER DHH 64850
+COMPUTER CRH 52300
 ...
+BEST c22d60a3 15400
+BEST 67eecd76 7350
 ```
 
 Plain text, one entry per line, uppercase ASCII, mode tag first. One file
 means one atomic write and one parse for all three boards.
+
+`LAST` pre-fills the initials on the next entry and `DIALS` remembers the
+throttle/airspeed strip. `BEST` lines are the per-map bests below; they are
+written in queue order, oldest first, which is what makes eviction a matter
+of dropping the first line. An entry line may carry a fourth field, its
+flags, which nothing sets today: a board saved by a build that did keeps it
+through a load and a save.
 
 - **Written on commit**, not at exit, so a `kill -9` or a compositor crash a
   second later cannot lose an entry.
@@ -236,7 +278,18 @@ no longer resets `gamenum`. That was verified to be the cause by reverting
 just that hunk and watching the old hash come back. Determinism itself is
 unaffected -- the test compares two runs of the same build, and they match.
 
-## Not doing yet
+It has moved once more since, to `81cbba22`, when destroyed buildings and oxen
+started leaving the collision list (see the Fixed entry in
+`../RELEASE_NOTES.md`). The value is not pinned anywhere -- `simtest` compares
+two runs of the same build and prints the hash for information -- so a
+deliberate simulation change is expected to move it.
 
-Attract-mode cycling between the title screen and the board. Worth having,
-but it is a title-screen feature rather than a leaderboard one.
+## Since built
+
+Attract-mode cycling between the title screen and the boards, which was left
+out of the first cut as a title-screen feature rather than a leaderboard one.
+It lives in `main.c` for that reason -- an idle title screen cycles the three
+boards, and the renderer draws them with no run to report. The timings are in
+[ARCHITECTURE.md](ARCHITECTURE.md#the-front-ends-states); the board page
+itself is `render_scores()` with a NULL headline, which drops the headline,
+the score line and the ranked note.

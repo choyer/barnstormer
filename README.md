@@ -34,19 +34,12 @@ make install PREFIX="$HOME/.local"
 sudo make install          # PREFIX=/usr/local by default
 ```
 
-Requirements, all of which a Wayland desktop already has:
-
-| Dependency          | Why                                    | Required? |
-|---------------------|----------------------------------------|-----------|
-| `wayland-client`    | the only display path                  | yes       |
-| `wayland-scanner`   | generates protocol glue at build time  | yes       |
-| `xkbcommon`         | keyboard decoding                      | yes       |
-| `alsa-lib`          | PC-speaker emulation                   | optional  |
-| `python3`           | only for `make regen-data`             | no        |
-
-Without ALSA the game builds and runs silently. There is no SDL, no GTK, no
-GL and no image or font library: the renderer is a software rasteriser writing
-into a shared-memory buffer, and the font and sprites are compiled in.
+Requirements, all of which a Wayland desktop already has: `wayland-client`,
+`wayland-scanner`, `xkbcommon`, and `alsa-lib` for sound (optional -- without
+it the game builds and runs silently). `python3` is needed only by
+`make regen-data`. There is no SDL, no GTK, no GL and no image or font
+library; see [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) for the dependency
+table and the rest of the build and test entry points.
 
 Breakout mode additionally needs a compositor that implements
 `wlr-layer-shell-unstable-v1` — Hyprland, Sway, river, niri, Wayfire and
@@ -165,25 +158,13 @@ wildlife and ammunition limits.
 
 ### Motion
 
-The simulation advances 12.14 times a second, as the original's did, and on a
-320x200 screen a 4-12 pixel step a tick was near invisible. Magnified eight
-times onto a full-screen overlay it is 32-96 pixels, twelve times a second,
-against a perfectly still desktop -- which reads as judder.
-
-The game therefore draws between those positions. Nothing about the
-simulation changes: it still advances exactly 12.14 times a second, the
-physics and collisions are identical, and the deterministic replay test hashes
-the same either way. Only where things are painted moves.
-
-Aircraft, scenery and the camera are offset half a tick either side of their
-simulated position, so the display's timing averages out to the original's
-exactly -- no added latency in either direction. Shots, bombs and missiles are
-offset backwards instead, drawn between where they were and where they are:
-they die the instant they touch something, and drawing one ahead would put it
-through the wall that is about to stop it.
-
-`--no-smooth` turns all of it off and draws only the positions the simulation
-produces, which is what the original did.
+The simulation advances 12.14 times a second, as the original's did, and the
+game draws between those positions so that an eight-times magnified step does
+not read as judder. Nothing about the simulation changes -- the physics,
+collisions and the deterministic replay hash are identical either way -- and
+`--no-smooth` draws only the positions the simulation produces, which is what
+the original did. The offsets and why they differ for ordnance are in
+[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
 
 ### Breakout mode
 
@@ -195,83 +176,35 @@ releases it too. `--no-grab` leaves the keyboard with the desktop, which makes t
 overlay a display rather than a game — useful for watching the computer pilots
 fight it out over your work.
 
-Anything that asks for the keyboard exclusively takes it from the overlay: the
-Omarchy menu and the screenshot picker both do. The compositor cannot give it
-back afterwards, because it looks for the surface under the pointer and the
-overlay has no input region to be found by, so the game would be left deaf
-with the aircraft still flying. It therefore pauses the moment the keyboard
-goes, asks for it back as soon as the compositor returns the pointer, and
-resumes — in practice a few milliseconds after the menu closes. If a
-compositor ever leaves it stranded, `SIGUSR1` asks for the keyboard again:
+Anything that asks for the keyboard exclusively takes it from the overlay --
+the Omarchy menu and the screenshot picker both do -- and the compositor
+cannot give it back by itself. The game pauses the moment the keyboard goes
+and asks for it back as soon as the compositor returns the pointer;
+`SIGUSR1` asks again if a compositor ever leaves it stranded. See
+[doc/PLATFORM.md](doc/PLATFORM.md) for why, and for the keybind.
 
-```lua
-o.bind("SUPER + SHIFT + K", "Barnstormer: reclaim keyboard",
-       "pkill -USR1 -x barnstormer")
-```
-
-### Hyprland
+### Hyprland and the Omarchy menu
 
 A tiling compositor will hand the window whatever shape the layout dictates,
-and a 320×200 game in a tall column leaves a lot of sky. Floating it is nicer.
-Omarchy configures Hyprland in Lua, so this goes in `~/.config/hypr/hyprland.lua`:
+and a 320×200 game in a tall column leaves a lot of sky, so floating it is
+nicer; the game also supports `wp-fractional-scale-v1` and rasterises at
+device resolution. `make install` puts two `.desktop` entries and their icons
+in place, so both ways to play show up under **Apps** in the launcher and the
+Omarchy menu with no further setup. The window rule to paste into
+`~/.config/hypr/hyprland.lua`, the entry table and the icon details are in
+[doc/PLATFORM.md](doc/PLATFORM.md).
 
-```lua
-o.window("^(barnstormer)$", {
-  float = true,
-  center = true,
-  size = { 1280, 800 },
-  tag = "-default-opacity",
-  opacity = "1 1",
-})
-```
-
-The last two lines opt out of Omarchy's default window transparency, which
-would otherwise wash the artwork out. Overlay mode is a layer surface rather
-than a window, so the rule does not apply to it.
-
-The game supports `wp-fractional-scale-v1`, so on a fractionally scaled output
-it rasterises at device resolution rather than being resampled.
-
-### The Omarchy menu
-
-`make install` puts two `.desktop` entries and their icons in place, so both
-ways to play show up under **Apps** in the launcher and the Omarchy menu with
-no further setup:
-
-| Entry                 | Runs                     | Icon                  |
-|-----------------------|--------------------------|-----------------------|
-| `Sopwith Barnstormer` | `barnstormer`            | the player's aircraft |
-| `Barnstormer Overlay` | `barnstormer --breakout` | the enemy's, in pink  |
-
-Both icons are generated from the same sprite the game draws by
-`tools/make_icon.py`, which takes the livery as its third argument, so they
-cannot drift out of step with the artwork.
-
-A row added to `~/.config/omarchy/extensions/omarchy-menu.jsonc` would be a
-glyph rather than an image: the menu renders an icon image only for rows of
-`kind: "app"`, which is derived from the desktop entry list and cannot be set
-from the JSONC. A desktop entry is what gets you a real icon.
-
-## Layout
-
-```
-include/     public interfaces, one per subsystem
-game/        the simulation: no windows, no files, no audio device
-data/        artwork and the stock map, generated from ../origsrc
-render/      software rasteriser and scene composition
-platform/    the Wayland backend (xdg-shell and wlr-layer-shell)
-audio/       PC-speaker emulation over ALSA
-protocol/    vendored Wayland protocol XML
-tools/       the extractors that regenerate data/
-tests/       headless soak test
-doc/         design notes and the plans for what comes next
-```
+## How it is put together
 
 The seam that matters is between `game/` and everything else. `game_tick()`
-takes one 16-bit control word per player and advances the world; it never
-touches I/O, and every random choice runs off a seed in `game_t`. That is what
-lets the same core drive both front ends, and it is what a future netplay layer
+takes one 16-bit control word per player and advances the world; it touches no
+I/O, and every random choice runs off a seed in `game_t`. That is what lets
+the same core drive both front ends, and it is what a future netplay layer
 plugs into.
+
+The tree, that seam's invariants, the front end's states and the build and
+test entry points are in [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md);
+[doc/](doc/README.md) indexes the rest of the design notes.
 
 ## What is planned but not built
 
