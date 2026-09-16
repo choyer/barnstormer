@@ -57,6 +57,11 @@ recipe always gives the same level.
 Heights run 26–199. Keep peaks at or below **130**: above that there is no
 room to turn round, and above 160 an aeroplane can barely get over it.
 
+**The outer 140 columns at each end are overwritten with a wall** rising to
+186, whatever the recipe says, so that the edge of the world looks like an
+edge instead of an aeroplane stuck against nothing. Write your `land` widths
+to total 3000 as usual — the walls are carved out of the ends afterwards.
+
 ## `field` — the airfields
 
 ```
@@ -85,9 +90,24 @@ buildings owner=enemy from=1180 to=2200 count=17 kinds=factory,fuel,hangar
 across, `count=` how many, and `kinds=` a list cycled through: `house`,
 `factory`, `fuel` (worth 200 and explodes harder), `hangar`.
 
+They are placed in **clusters of two to four with open ground between**, not
+at an even spacing: a row of evenly spaced structures reads as fence posts,
+and leaves a pilot nowhere to turn round between passes. Give a group room
+for that — roughly 70 columns per cluster on top of the buildings themselves,
+and the generator will say how much it wants if there is not enough.
+
+For one building exactly where you want it:
+
+```
+building owner=enemy at=1820 kind=fuel
+```
+
 A level holds **20 buildings**, and **three of them are the player's** — the
 game decides that by position, and the generator arranges the file so your
 `owner=player` group lands in those positions. Ask for three.
+
+Keep everything between columns **140 and 2860**; inside that is the wall at
+the end of the world.
 
 Buildings need 24 columns each, must not sit on a strip, and must not be in
 the 170 columns in front of one. The generator refuses and tells you where to

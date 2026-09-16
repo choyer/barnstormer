@@ -96,6 +96,15 @@ So a 180-high mountain is not scenery, it is a wall; a 150-high plateau is a
 corridor you can fly along but not manoeuvre over. Peaks of 110–130 give you
 dramatic terrain that is still a place to fight.
 
+## The edges of the world
+
+The world is 3000 columns and stops dead at both ends: an aeroplane that
+reaches column 0 or column 3000 stays there, against nothing, with no
+indication of why. Every level should therefore wall both ends off with a
+steep rise — `levelgen.py` does it automatically over the outer 140 columns,
+up to 186, which is high enough to read as the end of the world rather than
+as a hill worth crossing.
+
 ## Checking a level
 
 ```bash
