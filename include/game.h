@@ -11,7 +11,7 @@
 #define GAME_H
 
 #include "sopwith.h"
-#include "level.h"
+#include "map.h"
 
 /* Simulation rate.  The original advanced the world every 15 units of a
  * counter that the 18.2 Hz PC timer bumped by 10, i.e. 12.14 moves a second.
@@ -33,7 +33,7 @@ typedef struct {
 } sound_req_t;
 
 struct game {
-    const level_t *level;
+    const map_t *map;
     playmode_t mode;
 
     object_t pool[MAX_OBJS];
@@ -104,20 +104,20 @@ static inline bool game_completed(const game_t *g)
 /* Whether a finished run counts for the high score table.
  *
  * A board is a comparison between runs on one fixed world, so a run on an
- * authored level does not reach one: a level with four buildings and no
+ * authored map does not reach one: a map with four buildings and no
  * enemy would top it without meaning anything.  Those runs are kept as a
- * best per level instead (scores_best()). */
+ * best per map instead (scores_best()). */
 static inline bool game_ranked(const game_t *g)
 {
-    return game_completed(g) && g->level == &level_classic;
+    return game_completed(g) && g->map == &map_classic;
 }
 
-/* Where a building placed at world column `x` stands.  Shared with the level
+/* Where a building placed at world column `x` stands.  Shared with the map
  * editor so that it draws what game_start() will build. */
 int game_pad_height(const uint8_t *ground, int x);
 
-/* Build a fresh run.  `level` must outlive the game. */
-void game_start(game_t *g, const level_t *level, playmode_t mode, int gamenum);
+/* Build a fresh run.  `map` must outlive the game. */
+void game_start(game_t *g, const map_t *map, playmode_t mode, int gamenum);
 
 /* How many crashes the run allows, replacing the default set by
  * game_start().  Clamped to something the LIFE gauge can draw; call it

@@ -381,7 +381,7 @@ static bool move_player(game_t *g, object_t *ob, uint16_t key)
             if (!g->cur_endstat)
                 sw_loser(g, ob);
         } else {
-            sw_init_player(g, ob, level_runway_slot(g->mode, ob->index));
+            sw_init_player(g, ob, map_runway_slot(g->mode, ob->index));
             if (g->cur_endstat == END_WINNER)
                 sw_winner(g, ob);
         }
@@ -431,7 +431,7 @@ static bool move_comp(game_t *g, object_t *ob)
 
     case ST_CRASHED:
         if (ob->hitcount <= 0 && !g->cur_endstat)
-            sw_init_comp(g, ob, level_runway_slot(g->mode, ob->index));
+            sw_init_comp(g, ob, map_runway_slot(g->mode, ob->index));
         break;
 
     default:

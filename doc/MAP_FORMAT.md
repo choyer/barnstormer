@@ -1,12 +1,12 @@
-# Barnstormer level format (version 1)
+# Barnstormer map format (version 1)
 
-Implemented by `level_load()` and `level_save()` in `game/level.c`, against
-`level_t` in `include/level.h`. `tests/leveltest.c` holds the format to this
+Implemented by `map_load()` and `map_save()` in `game/map.c`, against
+`map_t` in `include/map.h`. `tests/maptest.c` holds the format to this
 document; `make test` runs it.
 
 ## Goals
 
-* Human-readable, so a level can be diffed, reviewed and hand-edited.
+* Human-readable, so a map can be diffed, reviewed and hand-edited.
 * Small enough to send to somebody.
 * Forward-compatible: an unknown key is skipped, not an error.
 * Verifiable: a hash a peer can compare before starting a networked game.
@@ -15,17 +15,19 @@ document; `make test` runs it.
 
 UTF-8 text, LF line endings. Blank lines and lines beginning with `#` are
 ignored. Every other line is `key value...`, whitespace-separated. The
-`barnstormer-level` header must come first; the rest may come in any order.
+`barnstormer-map` header must come first; the rest may come in any order.
+The reader also accepts the superseded `barnstormer-level 1` header, so files
+written before the rename still load; it is never written back.
 
 ```
-barnstormer-level 1
+barnstormer-map 1
 name Bridge Too Far
 author carl
 seed 7491
 size 3000 200
 
 # Terrain: run-length encoded height field, left to right.
-# Each pair is "count:height"; the counts must sum to the level width.
+# Each pair is "count:height"; the counts must sum to the map width.
 # Heights are 26..199, measured up from the bottom of the world.
 ground 183:199 1:198 1:197 1:196 ... 8:64
 # ... continued on as many "ground" lines as needed; they concatenate.
@@ -65,62 +67,62 @@ may contain spaces. `author` is optional and is preserved across a round trip.
 | buildings at least 16 columns apart, and inside the world | they are 16 wide and the game flattens the ground under them |
 | no building across a runway's 21 columns | aircraft spawn on the strip, inside the building, and it explodes on the first frame |
 | an ox inside the world | it is drawn where it stands |
-| `name` present, `name` and `author` at most 63 bytes | a level with no name cannot be offered in a picker |
-| a fixed-arity line carries no extra words | `runway 100 0 please` is a typo, not a level |
+| `name` present, `name` and `author` at most 63 bytes | a map with no name cannot be offered in a picker |
+| a fixed-arity line carries no extra words | `runway 100 0 please` is a typo, not a map |
 
-A file that breaks a rule is rejected — `level_load()` returns -1 with `errno`
-`EINVAL` and nothing allocated — and `level_error()` names the line:
+A file that breaks a rule is rejected — `map_load()` returns -1 with `errno`
+`EINVAL` and nothing allocated — and `map_error()` names the line:
 
 ```
 line 12: "3000:210" is not count:height with a height in 26..199
 line 6: the runway at 100 is not flat: 26..100 over its 21 columns, more than 4 apart
 ```
 
-Levels are shared between strangers; a loader that limps on with a half-valid
+Maps are shared between strangers; a loader that limps on with a half-valid
 world is worse than one that says no.
 
-## What `level_save()` writes
+## What `map_save()` writes
 
 The canonical form: no comments, sections in the order above, terrain runs
-wrapped onto `ground` lines that never exceed 76 columns. Saving a level, loading it
-back and saving it again produces byte-identical files. A level that would not
+wrapped onto `ground` lines that never exceed 76 columns. Saving a map, loading it
+back and saving it again produces byte-identical files. A map that would not
 load back is refused rather than written, and the write goes through a
-`.tmp` file and a rename, so an interrupted save cannot truncate a level that
+`.tmp` file and a rename, so an interrupted save cannot truncate a map that
 was already there.
 
-`level_free()` refuses a pointer it did not hand out, so a built-in level like
-`level_classic` cannot be freed by accident.
+`map_free()` refuses a pointer it did not hand out, so a built-in map like
+`map_classic` cannot be freed by accident.
 
 ## Hash
 
-`level_hash()` is FNV-1a over the canonical serialisation — the exact bytes
-`level_save()` writes, so comments, key order and line breaks cannot change
+`map_hash()` is FNV-1a over the canonical serialisation — the exact bytes
+`map_save()` writes, so comments, key order and line breaks cannot change
 it. One serialiser feeds both the file and the hash, which is what makes that
 true by construction rather than by two pieces of code agreeing to be careful.
 
-Two copies of a level hash the same however their files are laid out; a single
+Two copies of a map hash the same however their files are laid out; a single
 column of terrain, a moved runway or a different name gives a different hash.
-A level that does not pass `level_check()` hashes to 0, meaning "nothing to
-compare" rather than any particular level.
+A map that does not pass `map_check()` hashes to 0, meaning "nothing to
+compare" rather than any particular map.
 
-The classic level is `3b7788af`. That value is pinned in `tests/leveltest.c`:
+The classic map is `c22d60a3`. That value is pinned in `tests/maptest.c`:
 a hash people have exchanged is a promise, and the canonical form should not
 drift without somebody deciding that it should.
 
-The editor prints it when it writes a file, and `--level` prints it when it
+The editor prints it when it writes a file, and `--map` prints it when it
 loads one, so two people can check they are flying the same thing. Networked
 peers will exchange it at join time and refuse to start if it differs.
 
 ## Size
 
-Measured on the classic level, which is as detailed as levels get: its terrain
+Measured on the classic map, which is as detailed as maps get: its terrain
 compresses to 957 runs, and the file is **6,024 bytes**. That is bigger than
 an early estimate of "under 4 KB" — the terrain is hand-drawn and rarely flat
 for long, so the RLE saves less than a smoother landscape would.
 
 Gzipped it is 1,770 bytes, which is 32 lines of base64 at 76 columns — enough
 to paste into a chat window, but not the two lines this document once claimed.
-A level built in the editor, with more flat ground, will be smaller.
+A map built in the editor, with more flat ground, will be smaller.
 
 ## Binary form
 

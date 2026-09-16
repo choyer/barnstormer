@@ -1,10 +1,10 @@
 /*
- * leveltest.c -- the level file format, headless.
+ * maptest.c -- the map file format, headless.
  *
  * Everything is written to a throwaway directory under /tmp, so the tests
- * never touch a real level.  The round trip is checked against the classic
- * level rather than a toy one: whatever the format cannot carry, it cannot
- * carry for the level the whole game is balanced around.
+ * never touch a real map.  The round trip is checked against the classic
+ * map rather than a toy one: whatever the format cannot carry, it cannot
+ * carry for the map the whole game is balanced around.
  */
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "level.h"
+#include "map.h"
 
 static int failures;
 static char sandbox[256];
@@ -30,39 +30,39 @@ static void ok(const char *what, bool cond)
 static void rejects(const char *what, const char *body, const char *expect)
 {
     char path[512];
-    snprintf(path, sizeof(path), "%s/bad.lvl", sandbox);
+    snprintf(path, sizeof(path), "%s/bad.map", sandbox);
     FILE *f = fopen(path, "w");
     fputs(body, f);
     fclose(f);
 
-    level_t *lv = NULL;
+    map_t *lv = NULL;
     errno = 0;
-    int rc = level_load(path, &lv);
+    int rc = map_load(path, &lv);
     bool good = rc < 0 && errno == EINVAL && lv == NULL &&
-                strstr(level_error(), expect) != NULL;
+                strstr(map_error(), expect) != NULL;
     ok(what, good);
     if (!good)
-        printf("    wanted \"%s\", got \"%s\"\n", expect, level_error());
+        printf("    wanted \"%s\", got \"%s\"\n", expect, map_error());
     if (rc == 0)
-        level_free(lv);
+        map_free(lv);
 }
 
-/* The other half: a level that sits just inside the rules must still load. */
+/* The other half: a map that sits just inside the rules must still load. */
 static void accepts(const char *what, const char *body)
 {
     char path[512];
-    snprintf(path, sizeof(path), "%s/good.lvl", sandbox);
+    snprintf(path, sizeof(path), "%s/good.map", sandbox);
     FILE *f = fopen(path, "w");
     fputs(body, f);
     fclose(f);
 
-    level_t *lv = NULL;
-    int rc = level_load(path, &lv);
+    map_t *lv = NULL;
+    int rc = map_load(path, &lv);
     ok(what, rc == 0);
     if (rc < 0)
-        printf("    rejected: %s\n", level_error());
+        printf("    rejected: %s\n", map_error());
     else
-        level_free(lv);
+        map_free(lv);
 }
 
 static void write_in(const char *dir, const char *name, const char *body)
@@ -78,21 +78,21 @@ static void write_in(const char *dir, const char *name, const char *body)
     fclose(f);
 }
 
-/* Write a level out, load it back and hash it -- the hash of what a file
+/* Write a map out, load it back and hash it -- the hash of what a file
  * means, whatever the file looks like. */
 static uint32_t hash_of(const char *body)
 {
     char path[512];
-    snprintf(path, sizeof(path), "%s/hash.lvl", sandbox);
+    snprintf(path, sizeof(path), "%s/hash.map", sandbox);
     FILE *f = fopen(path, "w");
     fputs(body, f);
     fclose(f);
 
-    level_t *lv = NULL;
-    if (level_load(path, &lv) < 0)
+    map_t *lv = NULL;
+    if (map_load(path, &lv) < 0)
         return 0;
-    uint32_t h = level_hash(lv);
-    level_free(lv);
+    uint32_t h = map_hash(lv);
+    map_free(lv);
     return h;
 }
 
@@ -122,9 +122,9 @@ static char *slurp(const char *path, size_t *len)
     return buf;
 }
 
-/* The smallest level that loads: flat ground, two runways on it. */
+/* The smallest map that loads: flat ground, two runways on it. */
 #define VALID \
-    "barnstormer-level 1\n"  /* 1 */ \
+    "barnstormer-map 1\n"    /* 1 */ \
     "name Test\n"            /* 2 */ \
     "seed 7491\n"            /* 3 */ \
     "size 3000 200\n"        /* 4 */ \
@@ -150,7 +150,7 @@ static const char *variant(int lineno, const char *replacement)
 
 int main(void)
 {
-    snprintf(sandbox, sizeof(sandbox), "/tmp/barnstormer-leveltest-%d",
+    snprintf(sandbox, sizeof(sandbox), "/tmp/barnstormer-maptest-%d",
              (int)getpid());
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "rm -rf %s", sandbox);
@@ -158,60 +158,60 @@ int main(void)
     mkdir(sandbox, 0755);
 
     char path[512], other[512];
-    path_in(path, sizeof(path), "classic.lvl");
+    path_in(path, sizeof(path), "classic.map");
 
-    /* ---- the classic level survives a round trip ---- */
+    /* ---- the classic map survives a round trip ---- */
 
-    ok("the classic level saves", level_save(path, &level_classic) == 0);
+    ok("the classic map saves", map_save(path, &map_classic) == 0);
 
-    level_t *lv = NULL;
-    ok("and loads back", level_load(path, &lv) == 0 && lv != NULL);
+    map_t *lv = NULL;
+    ok("and loads back", map_load(path, &lv) == 0 && lv != NULL);
 
     if (lv) {
-        ok("name survives", !strcmp(lv->name, level_classic.name));
-        ok("seed survives", lv->rand_seed == level_classic.rand_seed);
+        ok("name survives", !strcmp(lv->name, map_classic.name));
+        ok("seed survives", lv->rand_seed == map_classic.rand_seed);
         ok("size survives",
-           lv->width == level_classic.width &&
-           lv->height == level_classic.height);
+           lv->width == map_classic.width &&
+           lv->height == map_classic.height);
         ok("every one of the 3000 columns survives",
-           !memcmp(lv->ground, level_classic.ground, MAX_X));
+           !memcmp(lv->ground, map_classic.ground, MAX_X));
         ok("all eight runways survive, in order",
-           lv->n_runways == level_classic.n_runways &&
-           !memcmp(lv->runways, level_classic.runways,
-                   sizeof(level_runway_t) * (size_t)lv->n_runways));
+           lv->n_runways == map_classic.n_runways &&
+           !memcmp(lv->runways, map_classic.runways,
+                   sizeof(map_runway_t) * (size_t)lv->n_runways));
         ok("all twenty buildings survive, in order",
-           lv->n_targets == level_classic.n_targets &&
-           !memcmp(lv->targets, level_classic.targets,
-                   sizeof(level_target_t) * (size_t)lv->n_targets));
+           lv->n_targets == map_classic.n_targets &&
+           !memcmp(lv->targets, map_classic.targets,
+                   sizeof(map_target_t) * (size_t)lv->n_targets));
         ok("both oxen survive",
-           lv->n_oxen == level_classic.n_oxen &&
-           !memcmp(lv->oxen, level_classic.oxen,
-                   sizeof(level_point_t) * (size_t)lv->n_oxen));
+           lv->n_oxen == map_classic.n_oxen &&
+           !memcmp(lv->oxen, map_classic.oxen,
+                   sizeof(map_point_t) * (size_t)lv->n_oxen));
 
         /* ---- and the serialisation is canonical ---- */
-        path_in(other, sizeof(other), "classic2.lvl");
-        ok("the reloaded level saves again", level_save(other, lv) == 0);
+        path_in(other, sizeof(other), "classic2.map");
+        ok("the reloaded map saves again", map_save(other, lv) == 0);
 
         size_t n1 = 0, n2 = 0;
         char *a = slurp(path, &n1), *b = slurp(other, &n2);
         ok("byte for byte the same file", a && b && n1 == n2 && !strcmp(a, b));
-        ok("the whole classic level fits in 8 KB of text", n1 < 8192);
+        ok("the whole classic map fits in 8 KB of text", n1 < 8192);
         free(a);
         free(b);
 
-        ok("freeing it succeeds", level_free(lv) == 0);
-        ok("freeing it twice does not", level_free(lv) < 0 && errno == EINVAL);
+        ok("freeing it succeeds", map_free(lv) == 0);
+        ok("freeing it twice does not", map_free(lv) < 0 && errno == EINVAL);
     }
 
-    ok("a built-in level cannot be freed",
-       level_free((level_t *)&level_classic) < 0 && errno == EINVAL);
+    ok("a built-in map cannot be freed",
+       map_free((map_t *)&map_classic) < 0 && errno == EINVAL);
 
     /* ---- what a hand-edited file may contain ---- */
 
-    path_in(path, sizeof(path), "hand.lvl");
+    path_in(path, sizeof(path), "hand.map");
     FILE *f = fopen(path, "w");
-    fputs("# a level someone typed\n"
-          "barnstormer-level 1\n"
+    fputs("# a map someone typed\n"
+          "barnstormer-map 1\n"
           "\n"
           "name  Bridge Too Far  \n"
           "author carl\n"
@@ -228,7 +228,7 @@ int main(void)
 
     lv = NULL;
     ok("comments, blank lines and unknown keys are fine",
-       level_load(path, &lv) == 0 && lv != NULL);
+       map_load(path, &lv) == 0 && lv != NULL);
     if (lv) {
         ok("the name is trimmed, inner spaces kept",
            !strcmp(lv->name, "Bridge Too Far"));
@@ -238,25 +238,25 @@ int main(void)
         ok("the seed is read", lv->rand_seed == 12345);
         ok("one building, one ox", lv->n_targets == 1 && lv->n_oxen == 1);
 
-        path_in(other, sizeof(other), "hand2.lvl");
-        ok("it saves with the author intact", level_save(other, lv) == 0);
+        path_in(other, sizeof(other), "hand2.map");
+        ok("it saves with the author intact", map_save(other, lv) == 0);
         char *txt = slurp(other, NULL);
         ok("which is on its own line", txt && strstr(txt, "\nauthor carl\n"));
         ok("and no comments are written", txt && !strchr(txt, '#'));
         free(txt);
-        level_free(lv);
+        map_free(lv);
     }
 
     /* ---- what it may not ---- */
 
-    rejects("a file that is not a level at all",
-            "hello\n", "not a barnstormer level file");
+    rejects("a file that is not a map at all",
+            "hello\n", "not a barnstormer map file");
     rejects("an empty file",
-            "", "not a barnstormer level file");
+            "", "not a barnstormer map file");
     rejects("a version from the future",
-            variant(1, "barnstormer-level 2"), "format version 2");
+            variant(1, "barnstormer-map 2"), "format version 2");
     rejects("a header with no version",
-            variant(1, "barnstormer-level"), "no version number");
+            variant(1, "barnstormer-map"), "no version number");
     rejects("an empty name",
             variant(2, "name   "), "line 2: name is empty");
     rejects("a name that will not fit",
@@ -266,7 +266,7 @@ int main(void)
     rejects("a world of another size",
             variant(4, "size 2000 200"), "line 4: size must be 3000 200");
     rejects("a file with no size line",
-            "barnstormer-level 1\nname Test\nground 3000:100\n"
+            "barnstormer-map 1\nname Test\nground 3000:100\n"
             "runway 100 0\nrunway 200 1\n", "no size line");
     rejects("ground below the instrument band",
             variant(5, "ground 3000:25"), "line 5: \"3000:25\" is not");
@@ -281,7 +281,7 @@ int main(void)
     rejects("a ground line with nothing on it",
             variant(5, "ground"), "no runs on it");
     rejects("a single runway",
-            "barnstormer-level 1\nname Test\nsize 3000 200\n"
+            "barnstormer-map 1\nname Test\nsize 3000 200\n"
             "ground 3000:100\nrunway 100 0\n", "at least 2 runways");
     rejects("a runway facing sideways",
             variant(6, "runway 100 2"), "line 6: a runway needs");
@@ -310,15 +310,15 @@ int main(void)
     rejects("trailing junk after a runway",
             variant(6, "runway 100 0 please"), "line 6: trailing text");
     rejects("trailing junk after the version",
-            variant(1, "barnstormer-level 1 and a half"),
+            variant(1, "barnstormer-map 1 and a half"),
             "line 1: trailing text");
 
     /* Counted limits need a generated file. */
     {
         char big[8192];
-        int n = snprintf(big, sizeof(big), "barnstormer-level 1\nname Test\n"
+        int n = snprintf(big, sizeof(big), "barnstormer-map 1\nname Test\n"
                          "size 3000 200\nground 3000:100\n");
-        for (int i = 0; i < LEVEL_MAX_RUNWAYS + 1; i++)
+        for (int i = 0; i < MAP_MAX_RUNWAYS + 1; i++)
             n += snprintf(big + n, sizeof(big) - (size_t)n,
                           "runway %d 0\n", 100 + i * 100);
         rejects("a ninth runway", big, "more than 8 runways");
@@ -341,22 +341,22 @@ int main(void)
         /* Pinned, like the replay hash: the canonical form is a promise to
          * everyone who has already exchanged one, so it must not drift
          * without somebody deciding that it should. */
-        ok("the classic level hashes to what it always has",
-           level_hash(&level_classic) == 0x3b7788afu);
+        ok("the classic map hashes to what it always has",
+           map_hash(&map_classic) == 0xc22d60a3u);
 
-        path_in(path, sizeof(path), "hashed.lvl");
-        level_t *back = NULL;
-        ok("a level keeps its hash through a save and a load",
-           level_save(path, &level_classic) == 0 &&
-           level_load(path, &back) == 0 &&
-           level_hash(back) == level_hash(&level_classic));
+        path_in(path, sizeof(path), "hashed.map");
+        map_t *back = NULL;
+        ok("a map keeps its hash through a save and a load",
+           map_save(path, &map_classic) == 0 &&
+           map_load(path, &back) == 0 &&
+           map_hash(back) == map_hash(&map_classic));
         if (back)
-            level_free(back);
+            map_free(back);
 
         uint32_t canonical = hash_of(VALID);
         uint32_t messy = hash_of(
-            "# a level somebody typed, their way\n"
-            "barnstormer-level 1\n"
+            "# a map somebody typed, their way\n"
+            "barnstormer-map 1\n"
             "size 3000 200\n"
             "\n"
             "name Test\n"
@@ -376,25 +376,25 @@ int main(void)
         ok("and so does moving a runway",
            hash_of(variant(6, "runway 101 0")) != canonical);
 
-        level_t not_a_level = level_classic;
-        not_a_level.n_runways = 1;
-        ok("something that is not a level has no hash",
-           level_hash(&not_a_level) == 0 && level_hash(NULL) == 0);
+        map_t not_a_map = map_classic;
+        not_a_map.n_runways = 1;
+        ok("something that is not a map has no hash",
+           map_hash(&not_a_map) == 0 && map_hash(NULL) == 0);
     }
 
-    /* ---- the level directory ---- */
+    /* ---- the map directory ---- */
     {
         setenv("XDG_DATA_HOME", sandbox, 1);
 
         char dir[512];
-        ok("the level directory sits under XDG_DATA_HOME",
-           level_dir(dir, sizeof(dir)) && strstr(dir, sandbox) &&
-           strstr(dir, "/levels"));
+        ok("the map directory sits under XDG_DATA_HOME",
+           map_dir(dir, sizeof(dir)) && strstr(dir, sandbox) &&
+           strstr(dir, "/maps"));
 
-        level_info_t list[LEVEL_LIST_MAX];
+        map_info_t list[MAP_LIST_MAX];
         int skipped = -1;
         ok("an empty listing is not an error",
-           level_list(list, LEVEL_LIST_MAX, &skipped) == 0 && skipped == 0);
+           map_list(list, MAP_LIST_MAX, &skipped) == 0 && skipped == 0);
 
         char cmd2[600];
         snprintf(cmd2, sizeof(cmd2), "mkdir -p %s", dir);
@@ -404,26 +404,26 @@ int main(void)
         /* One at a time: variant() hands back the same static buffer every
          * call, so a table of them would be four pointers to the last one. */
         const char *made[][2] = {
-            { "zebra.lvl",  "name Zebra" },
-            { "alpha.lvl",  "name alpha field" },
-            { "mid.lvl",    "name Mid" },
+            { "zebra.map",  "name Zebra" },
+            { "alpha.map",  "name alpha field" },
+            { "mid.map",    "name Mid" },
         };
         for (size_t i = 0; i < sizeof(made) / sizeof(made[0]); i++)
             write_in(dir, made[i][0], variant(2, made[i][1]));
-        write_in(dir, "broken.lvl", variant(5, "ground 2999:100"));
-        write_in(dir, "notes.txt", "not a level at all\n");
+        write_in(dir, "broken.map", variant(5, "ground 2999:100"));
+        write_in(dir, "notes.txt", "not a map at all\n");
 
-        int n = level_list(list, LEVEL_LIST_MAX, &skipped);
-        ok("only the levels that load are offered", n == 3);
+        int n = map_list(list, MAP_LIST_MAX, &skipped);
+        ok("only the maps that load are offered", n == 3);
         ok("and the broken one is counted, not hidden", skipped == 1);
         ok("sorted by name, regardless of case",
            n == 3 && !strcmp(list[0].name, "alpha field") &&
            !strcmp(list[1].name, "Mid") && !strcmp(list[2].name, "Zebra"));
         ok("each with the path it came from",
-           n == 3 && strstr(list[0].path, "alpha.lvl") != NULL);
+           n == 3 && strstr(list[0].path, "alpha.map") != NULL);
 
         /* A listing that cannot fit everything must not overrun. */
-        int few = level_list(list, 2, &skipped);
+        int few = map_list(list, 2, &skipped);
         ok("a short list stops at the space it was given", few == 2);
     }
 
@@ -432,16 +432,16 @@ int main(void)
     lv = NULL;
     errno = 0;
     ok("a missing file reports ENOENT, not EINVAL",
-       level_load("/nonexistent/nope.lvl", &lv) < 0 && errno == ENOENT);
+       map_load("/nonexistent/nope.map", &lv) < 0 && errno == ENOENT);
 
     ok("saving somewhere unwritable fails without crashing",
-       level_save("/proc/nonexistent/nope.lvl", &level_classic) < 0);
+       map_save("/proc/nonexistent/nope.map", &map_classic) < 0);
 
     {
-        /* An interrupted save must not leave debris beside the level. */
-        path_in(path, sizeof(path), "debris.lvl");
+        /* An interrupted save must not leave debris beside the map. */
+        path_in(path, sizeof(path), "debris.map");
         ok("a good save leaves no .tmp behind",
-           level_save(path, &level_classic) == 0 && ({
+           map_save(path, &map_classic) == 0 && ({
                char tmp[520];
                snprintf(tmp, sizeof(tmp), "%s.tmp", path);
                access(tmp, F_OK) != 0;
@@ -449,13 +449,13 @@ int main(void)
     }
 
     {
-        /* An in-memory level is validated too, not just a parsed one. */
-        level_t bad = level_classic;
+        /* An in-memory map is validated too, not just a parsed one. */
+        map_t bad = map_classic;
         bad.n_runways = 1;
-        path_in(path, sizeof(path), "never.lvl");
-        ok("saving a level that would not load is refused",
-           level_save(path, &bad) < 0 && errno == EINVAL &&
-           strstr(level_error(), "at least 2 runways"));
+        path_in(path, sizeof(path), "never.map");
+        ok("saving a map that would not load is refused",
+           map_save(path, &bad) < 0 && errno == EINVAL &&
+           strstr(map_error(), "at least 2 runways"));
         ok("and nothing is written", access(path, F_OK) != 0);
     }
 

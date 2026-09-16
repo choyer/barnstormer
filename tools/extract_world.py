@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Extract the stock terrain and level layout from the original sources.
+"""Extract the stock terrain and map layout from the original sources.
 
 Reads origsrc/SWGROUND.C (the 3000-entry height field) and origsrc/SWGAMES.C
 (runway positions/orientations and the twenty building sites), plus the ox and
-flock spawn tables that SWINIT.C hard-codes, and emits src/data/level_classic.c.
+flock spawn tables that SWINIT.C hard-codes, and emits src/data/map_classic.c.
 
-    python3 src/tools/extract_world.py origsrc src/data/level_classic.c
+    python3 src/tools/extract_world.py origsrc src/data/map_classic.c
 """
 
 import re
@@ -23,7 +23,7 @@ def strip_comments(text):
 
 def main():
     src = sys.argv[1] if len(sys.argv) > 1 else "origsrc"
-    dst = sys.argv[2] if len(sys.argv) > 2 else "src/data/level_classic.c"
+    dst = sys.argv[2] if len(sys.argv) > 2 else "src/data/map_classic.c"
 
     ground_src = open(os.path.join(src, "SWGROUND.C"), errors="replace").read()
     body = ground_src.split("orground[MAX_X] = {", 1)[1].split("};", 1)[0]
@@ -51,7 +51,7 @@ def main():
                 " * Terrain and layout transcribed from the original Sopwith sources,\n"
                 " * Copyright (C) 1984-2000 David L. Clark.\n"
                 " * See LICENSE.origsopwith.txt.\n"
-                " */\n#include \"level.h\"\n\n")
+                " */\n#include \"map.h\"\n\n")
 
         f.write("static const uint8_t classic_ground[MAX_X] = {\n")
         for i in range(0, len(ground), 20):
@@ -59,25 +59,25 @@ def main():
         f.write("};\n\n")
 
         f.write("/* Eight runway slots.  Which of them are used, and by whom,\n"
-                " * depends on the play mode; see level_runway_slot().          */\n")
-        f.write("static const level_runway_t classic_runways[] = {\n")
+                " * depends on the play mode; see map_runway_slot().            */\n")
+        f.write("static const map_runway_t classic_runways[] = {\n")
         for x, o in zip(runway_x, runway_o):
             f.write("    { %4d, %d },\n" % (x, o))
         f.write("};\n\n")
 
-        f.write("static const level_target_t classic_targets[] = {\n")
+        f.write("static const map_target_t classic_targets[] = {\n")
         for x, t in zip(targ_x, targ_t):
             f.write("    { %4d, %d },\n" % (x, t))
         f.write("};\n\n")
 
-        f.write("static const level_point_t classic_oxen[] = {\n")
+        f.write("static const map_point_t classic_oxen[] = {\n")
         for x, y in zip(iox, ioy):
             f.write("    { %4d, %3d },\n" % (x, y))
         f.write("};\n\n")
 
-        f.write("const level_t level_classic = {\n")
+        f.write("const map_t map_classic = {\n")
         f.write('    .name       = "Classic",\n')
-        f.write("    .format     = LEVEL_FORMAT_VERSION,\n")
+        f.write("    .format     = MAP_FORMAT_VERSION,\n")
         f.write("    .width      = MAX_X,\n")
         f.write("    .height     = MAX_Y,\n")
         f.write("    .rand_seed  = %d,\n" % seed)

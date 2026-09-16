@@ -58,33 +58,33 @@ friends. If it is missing, the game says so and opens a window instead.
 barnstormer                       # title screen, pick a mode
 barnstormer --breakout            # straight into the overlay
 barnstormer --computer --game 3   # skip the menu, start at difficulty 3
-barnstormer --level salt-flats.lvl  # fly a level file instead of the map
+barnstormer --map salt-flats.map  # fly a map file instead of the classic one
 barnstormer --help
 ```
 
-It prints the level's name and a short hash (`flying "Salt Flats" by carl
+It prints the map's name and a short hash (`flying "Salt Flats" by carl
 [ebae6cce]`) — two people can compare those to be sure they are flying the
-same level, and the editor prints the same hash when it writes a file.
+same map, and the editor prints the same hash when it writes a file.
 
-`--level` takes a level file in the format described in
-[doc/LEVEL_FORMAT.md](doc/LEVEL_FORMAT.md) — plain text, hand-editable, and
+`--map` takes a map file in the format described in
+[doc/MAP_FORMAT.md](doc/MAP_FORMAT.md) — plain text, hand-editable, and
 strictly checked: a file that would make a broken world is refused with the
-line that is wrong rather than loaded. Runs on an authored level are not
+line that is wrong rather than loaded. Runs on an authored map are not
 ranked, because the high score boards are scores made on the classic map —
-a level with four buildings and no enemy would top them without meaning
-anything. What such a run gets instead is a personal best per level, kept
-against the level's own hash and shown in the **BEST** column of the picker,
-so a level of your own has something to beat without anything to farm.
-Levels you collect go in `~/.local/share/barnstormer/levels` (or
-`$XDG_DATA_HOME/barnstormer/levels`). Anything with a `.lvl` extension in
-there is offered by **LEVEL** on the title screen — pick one, then pick a mode
-and fly it. A file that will not load is not silently dropped: the picker says
-how many are there and refusing to load.
+a map with four buildings and no enemy would top them without meaning
+anything. What such a run gets instead is a personal best per map, kept
+against the map's own hash and shown in the **BEST** column of the picker,
+so a map of your own has something to beat without anything to farm.
+Maps you collect go in `~/.local/share/barnstormer/maps` (or
+`$XDG_DATA_HOME/barnstormer/maps`). Anything with a `.map` extension in
+there is offered by **Play Map** on the title screen — pick one, then pick
+a mode and fly it. A file that will not load is not silently dropped: the
+picker says how many are there and refusing to load.
 
-## Building a level
+## Building a map
 
 ```sh
-barnstormer --edit my-field.lvl    # opens it, or starts it if it is not there
+barnstormer --edit my-field.map    # opens it, or starts it if it is not there
 ```
 
 | Key | Action | | Key | Action |
@@ -99,18 +99,18 @@ barnstormer --edit my-field.lvl    # opens it, or starts it if it is not there
 
 `g` picks up whatever is under the cursor and carries it until you put it
 down; Esc puts it back where it came from. What you are carrying stays part of
-the level, so it will not be carried anywhere it could not have been placed —
+the map, so it will not be carried anywhere it could not have been placed —
 it stops, the cursor carries on, and it catches up when the way is clear.
 
-`n` and `a` open the level's name and author for typing: Enter keeps what you
-typed, Esc leaves the field as it was. A level cannot be left without a name,
+`n` and `a` open the map's name and author for typing: Enter keeps what you
+typed, Esc leaves the field as it was. A map cannot be left without a name,
 but an author is optional and can be cleared.
 
 The editor writes wherever you tell it to, creating the directory if it needs
-to, so `--edit ~/.local/share/barnstormer/levels/my-field.lvl` puts a level
+to, so `--edit ~/.local/share/barnstormer/maps/my-field.map` puts a map
 straight into the picker.
 
-The level you are building is always a level: a change that would break one of
+The map you are building is always a map: a change that would break one of
 the format's rules — a building across a landing strip, ground dug out from
 under a runway — is refused and the status line says which rule, so `Tab` is
 always ready and what you save always loads.
@@ -139,7 +139,7 @@ always ready and what you save always loads.
 
 Ten entries a board, three initials each, and a board apiece for novice,
 single player and against the computer -- a run in one mode is not comparable
-with a run in another, since single player is capped at 2,175 a level while
+with a run in another, since single player is capped at 2,175 a map while
 the computer board is not capped at all.
 
 A run ends in one of three ways. Your fifth crash is `GAME OVER` and counts.
@@ -257,7 +257,7 @@ from the JSONC. A desktop entry is what gets you a real icon.
 ```
 include/     public interfaces, one per subsystem
 game/        the simulation: no windows, no files, no audio device
-data/        artwork and the stock level, generated from ../origsrc
+data/        artwork and the stock map, generated from ../origsrc
 render/      software rasteriser and scene composition
 platform/    the Wayland backend (xdg-shell and wlr-layer-shell)
 audio/       PC-speaker emulation over ALSA
@@ -276,8 +276,8 @@ plugs into.
 ## What is planned but not built
 
 See [doc/ROADMAP.md](doc/ROADMAP.md). In short: an enhanced-graphics pack, a
-level editor with save/load/share, and internet multiplayer. The interfaces
-they need already exist (`sprite_set_t`, `level_t`, `net.h`); none of the
+map editor with save/load/share, and internet multiplayer. The interfaces
+they need already exist (`sprite_set_t`, `map_t`, `net.h`); none of the
 features are implemented.
 
 ## Licence

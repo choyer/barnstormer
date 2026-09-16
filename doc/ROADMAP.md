@@ -38,64 +38,64 @@ comfortably; adding a GL backend would cost more in dependencies than it buys.
 
 ---
 
-## 2. Level builder
+## 2. Map builder
 
 **Goal.** Design your own landscape and building layout, save it, load it,
 share it. The reference for the feel is Excitebike's track editor: direct,
 immediate, and playable from inside the editor.
 
-**What already supports it.** `level_t` (`include/level.h`) is the only thing
+**What already supports it.** `map_t` (`include/map.h`) is the only thing
 `game_start()` takes: a height field plus arrays of runways, buildings and
-oxen. `data/level_classic.c` is one of these and is not special-cased anywhere.
-The file format is specified in [LEVEL_FORMAT.md](LEVEL_FORMAT.md) and
-implemented: `level_load()`, `level_save()` and `level_free()` in
-`game/level.c`, with `level_error()` for the message to show whoever is editing
-the file. The classic level round-trips through disk to a byte-identical file
-and an identical 3000-tick replay hash (`tests/leveltest.c`). `barnstormer
---level FILE` flies one; such a run is deliberately not ranked, since the
+oxen. `data/map_classic.c` is one of these and is not special-cased anywhere.
+The file format is specified in [MAP_FORMAT.md](MAP_FORMAT.md) and
+implemented: `map_load()`, `map_save()` and `map_free()` in
+`game/map.c`, with `map_error()` for the message to show whoever is editing
+the file. The classic map round-trips through disk to a byte-identical file
+and an identical 3000-tick replay hash (`tests/maptest.c`). `barnstormer
+--map FILE` flies one; such a run is deliberately not ranked, since the
 boards are scores made on the classic map.
 
-**The editor.** `barnstormer --edit FILE` opens a level, or starts one if the
+**The editor.** `barnstormer --edit FILE` opens a map, or starts one if the
 file is not there yet: a terrain brush (raise, lower, smooth, flatten), the
-four building types, runways and oxen, the level's name and author as typed
+four building types, runways and oxen, the map's name and author as typed
 text, `g` to pick up something already placed and carry it somewhere else, and
 `Tab` to fly what you are looking at and `Tab` again to come back. The model
 is in `game/editor.c`, headless and tested (`tests/edittest.c`); the drawing
 is `render_edit()`.
 
-Its one rule is that the level under construction is always a level: every
-change is checked against `level_check()` -- the loader's own validation -- and
+Its one rule is that the map under construction is always a map: every
+change is checked against `map_check()` -- the loader's own validation -- and
 undone if it would break one, with the reason in the status line. So the test
 flight is always available, and saving cannot produce a file the game would
 refuse.
 
-**Choosing one.** `$XDG_DATA_HOME/barnstormer/levels` holds them, and the
-title screen's fourth row opens a picker over it: `level_list()` offers only
+**Choosing one.** `$XDG_DATA_HOME/barnstormer/maps` holds them, and the
+title screen's fourth row opens a picker over it: `map_list()` offers only
 the files that actually load, sorted by name, and says how many would not
 rather than hiding them.
 
 Carrying obeys the same rule as everything else. What is picked up stays part
-of the level while it is carried, so it is checked every step: carry it
+of the map while it is carried, so it is checked every step: carry it
 somewhere it cannot go and it stays where it was while the cursor carries on,
 and it catches up when the way is clear. It keeps its index, too, which
 erasing and re-placing would not -- a building's index decides whose side it
 is on and a runway's decides who spawns there.
 
 **Done.** The builder is finished as scoped here. What would extend it, if
-anyone wants it: more building types (the four are the original's), levels of
-a size other than 3000x200 (see the note in LEVEL_FORMAT.md about what that
+anyone wants it: more building types (the four are the original's), maps of
+a size other than 3000x200 (see the note in MAP_FORMAT.md about what that
 would take), and undo.
 
-**Sharing.** A level is one small text file — 6 KB for the classic level, the
+**Sharing.** A map is one small text file — 6 KB for the classic map, the
 most detailed there is — so the sharing story is "send the file". A base64 form
 is still worth having for pasting into a chat window, though it is bigger than
-this document once guessed: gzipped and base64'd, the classic level is 32 lines
-at 76 columns rather than two. `level_hash()` is written: FNV-1a over the
-canonical serialisation, printed when the editor saves and when `--level`
-loads, so two people can check they hold the same level. Netplay compares it
+this document once guessed: gzipped and base64'd, the classic map is 32 lines
+at 76 columns rather than two. `map_hash()` is written: FNV-1a over the
+canonical serialisation, printed when the editor saves and when `--map`
+loads, so two people can check they hold the same map. Netplay compares it
 at join time.
 
-**Ordering.** This should land before multiplayer: a shared level format is a
+**Ordering.** This should land before multiplayer: a shared map format is a
 prerequisite for peers agreeing on what world they are in.
 
 ---
@@ -128,11 +128,11 @@ second, which is under 100 bytes a second for a four-player game.
 * `net_state_hash()`: a checksum over the object pool and the terrain, compared
   every second or so. Divergence means a bug; the honest response is to say so
   and disconnect, not to paper over it.
-* Lobby: level name and hash exchanged at join time, so peers refuse to start
+* Lobby: map name and hash exchanged at join time, so peers refuse to start
   on different worlds.
 
 **What changes in the game.** `game_t::n_players` and the per-player runway
-slots exist already (`level_runway_slot()` has a `PLAY_NET` table). The pieces
+slots exist already (`map_runway_slot()` has a `PLAY_NET` table). The pieces
 that need real work are:
 
 * `sw_end_game()` currently assumes team 1 wins; the multi-player rule from the

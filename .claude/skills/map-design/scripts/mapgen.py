@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""levelgen.py -- turn a level recipe into a Barnstormer level file.
+"""mapgen.py -- turn a map recipe into a Barnstormer map file.
 
-The recipe is the source; the .lvl is the artifact.  Terrain is described as a
+The recipe is the source; the .map is the artifact.  Terrain is described as a
 few named landforms laid left to right, fields and buildings by where they go,
 and this works out the 3000 columns, the slot order and the ownership order --
 the parts that are tedious to do by hand and easy to get subtly wrong.
 
-    levelgen.py mountain-pass.recipe -o mountain-pass.lvl
+    mapgen.py mountain-pass.recipe -o mountain-pass.map
 
-Output is the same canonical form level_save() writes, so a level that comes
+Output is the same canonical form map_save() writes, so a map that comes
 back out of the editor differs only where it was edited.
 
 See references/recipe.md for the vocabulary and references/rules.md for why
@@ -40,7 +40,7 @@ class Fail(Exception):
     pass
 
 
-# ---- deterministic noise, so a recipe always gives the same level ---------
+# ---- deterministic noise, so a recipe always gives the same map -----------
 
 class Rng:
     def __init__(self, seed):
@@ -111,7 +111,7 @@ def build_terrain(land, rng):
     total = sum(int(o.get("width", 0)) for _, _, o in land)
     if total != MAX_X:
         short = MAX_X - total
-        raise Fail(f"the land widths total {total}, and a level is {MAX_X} "
+        raise Fail(f"the land widths total {total}, and a map is {MAX_X} "
                    f"columns: {'add' if short > 0 else 'remove'} {abs(short)}")
 
     g = []
@@ -203,7 +203,7 @@ def place_fields(ground, fields):
     the ground and 137 to climb over building height, so the flat runs on in
     the direction the strips face and then blends back into the land.  Without
     that the hillside beyond the pad is a wall at the end of the runway, which
-    is the commonest way a generated level turns out unflyable.
+    is the commonest way a generated map turns out unflyable.
 
     Slots are positional in the game: 0 is the player, 7 the enemy, and vs the
     computer 1 and 6 as well.  Laying slots 0-3 at the player's end and 4-7 at
@@ -220,7 +220,7 @@ def place_fields(ground, fields):
                                          else "left"))
     for who in ("player", "enemy"):
         if who not in ends:
-            raise Fail(f"there is no {who} field; a level needs both")
+            raise Fail(f"there is no {who} field; a map needs both")
 
     orig = list(ground)
     runways = [None] * MAX_RUNWAYS
@@ -390,7 +390,7 @@ def place_buildings(groups, singles, runways):
 
     enemy, player = out["enemy"], out["player"]
     if len(enemy) + len(player) > MAX_TARGETS:
-        raise Fail(f"{len(enemy) + len(player)} buildings; a level holds "
+        raise Fail(f"{len(enemy) + len(player)} buildings; a map holds "
                    f"{MAX_TARGETS}")
 
     # [enemy x7][the player's][the rest of the enemy's]
@@ -410,7 +410,7 @@ def place_oxen(ground, oxen):
 
 # ---- writing it out ------------------------------------------------------
 
-def write_level(path, rec, ground, runways, targets, oxen):
+def write_map(path, rec, ground, runways, targets, oxen):
     runs = []
     x = 0
     while x < MAX_X:
@@ -420,7 +420,7 @@ def write_level(path, rec, ground, runways, targets, oxen):
         runs.append(f"{run}:{h}")
         x += run
 
-    lines = [f"barnstormer-level 1", f"name {rec['name']}"]
+    lines = [f"barnstormer-map 1", f"name {rec['name']}"]
     if rec["author"]:
         lines.append(f"author {rec['author']}")
     lines += [f"seed {rec['seed']}", f"size {MAX_X} {MAX_Y}", ""]
@@ -477,7 +477,7 @@ def profile(ground, runways, targets, oxen, width=96, height=16):
 
 
 def lint(ground, runways, targets, n_player):
-    """Things that load and fly but make a poor level."""
+    """Things that load and fly but make a poor map."""
     say = []
 
     inland = ground[EDGE_WIDTH:MAX_X - EDGE_WIDTH]
@@ -537,7 +537,7 @@ def lint(ground, runways, targets, n_player):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("recipe")
-    ap.add_argument("-o", "--out", help="where to write the .lvl")
+    ap.add_argument("-o", "--out", help="where to write the .map")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -553,8 +553,8 @@ def main():
         print(f"{args.recipe}: {e}", file=sys.stderr)
         return 1
 
-    out = args.out or os.path.splitext(args.recipe)[0] + ".lvl"
-    runs = write_level(out, rec, ground, runways, targets, oxen)
+    out = args.out or os.path.splitext(args.recipe)[0] + ".map"
+    runs = write_map(out, rec, ground, runways, targets, oxen)
 
     if not args.quiet:
         print(profile(ground, runways, targets, oxen))

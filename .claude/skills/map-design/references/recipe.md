@@ -52,7 +52,7 @@ sections.
 
 `rough=N` adds a wandering N-unit wobble to any of them. 2–4 reads as
 landscape; above 6 it reads as noise. It is seeded from `seed`, so the same
-recipe always gives the same level.
+recipe always gives the same map.
 
 Heights run 26–199. Keep peaks at or below **130**: above that there is no
 room to turn round, and above 160 an aeroplane can barely get over it.
@@ -102,7 +102,7 @@ For one building exactly where you want it:
 building owner=enemy at=1820 kind=fuel
 ```
 
-A level holds **20 buildings**, and **three of them are the player's** — the
+A map holds **20 buildings**, and **three of them are the player's** — the
 game decides that by position, and the generator arranges the file so your
 `owner=player` group lands in those positions. Ask for three.
 

@@ -80,26 +80,26 @@ void render_layout(render_ctx_t *c, render_style_t style, int fb_w, int fb_h);
 void render_frame(framebuf_t *fb, const render_ctx_t *c, game_t *g);
 
 /* Title/attract screen; `t` is a monotonically rising frame counter.
- * `level_name` is NULL for the built-in map. */
+ * `map_name` is NULL for the built-in map. */
 void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
-                  int menu_sel, const char *level_name);
+                  int menu_sel, const char *map_name);
 
-/* Choosing a level from the ones in the level directory.  Row 0 is always the
+/* Choosing a map from the ones in the map directory.  Row 0 is always the
  * built-in map, so `sel` runs 0..n. */
 typedef struct {
-    const level_info_t *items;
+    const map_info_t *items;
     int n;
     int sel;
     int skipped;              /* files there that would not load          */
     const char *dir;          /* where they live, for when there are none */
-    /* The player's best on each level, 0 for one they have not finished.
+    /* The player's best on each map, 0 for one they have not finished.
      * `best[i]` goes with `items[i]`; `best_classic` is row 0. */
     const int *best;
     int best_classic;
-} levelpick_t;
+} mappick_t;
 
-void render_levels(framebuf_t *fb, const render_ctx_t *c,
-                   const levelpick_t *v);
+void render_maps(framebuf_t *fb, const render_ctx_t *c,
+                 const mappick_t *v);
 
 /* End-of-run summary. */
 void render_gameover(framebuf_t *fb, const render_ctx_t *c, game_t *g);
@@ -118,10 +118,10 @@ typedef struct {
     const char *board_name;
     int   final_score;
     bool  ranked;                /* false prints NOT RANKED               */
-    /* The player's best on the level just flown, shown when the run did
-     * not rank so that a level of one's own still has something to beat.
+    /* The player's best on the map just flown, shown when the run did
+     * not rank so that a map of one's own still has something to beat.
      * Zero prints nothing. */
-    int   level_best;
+    int   map_best;
     const score_table_t *table;
     int   highlight;
     int   edit_cell;
@@ -132,11 +132,11 @@ typedef struct {
 void render_scores(framebuf_t *fb, const render_ctx_t *c,
                    const scoreboard_t *v);
 
-/* The level editor's view of the world.  Passed as a snapshot rather than as
+/* The map editor's view of the world.  Passed as a snapshot rather than as
  * the editor itself, so the renderer stays ignorant of how editing works --
  * the same arrangement as scoreboard_t. */
 typedef struct {
-    const level_t *level;
+    const map_t *map;
     int   cursor;                /* the world column being worked on      */
     int   brush;                 /* terrain brush half-width              */
     int   footprint;             /* columns the current tool will occupy,

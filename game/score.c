@@ -32,9 +32,9 @@ static const char *const board_tag[SCORE_BOARDS] = {
     "NOVICE", "SINGLE", "COMPUTER",
 };
 
-/* Seeded from the real ceilings rather than round numbers: a perfect level
+/* Seeded from the real ceilings rather than round numbers: a perfect map
  * is 2175 (1800 of enemy buildings plus the 375 clear bonus), so several of
- * these are an exact number of clean levels and mean something to beat.
+ * these are an exact number of clean maps and mean something to beat.
  * The tenth entry sets the bar for ranking at all, and the three differ on
  * purpose -- novice welcomes a first attempt, the computer board does not.
  *
@@ -195,30 +195,30 @@ int scores_insert(scores_t *s, playmode_t mode, const char *name, int score)
     return at;
 }
 
-/* ---- one best per level ------------------------------------------------- */
+/* ---- one best per map --------------------------------------------------- */
 
-static int best_slot(const scores_t *s, uint32_t level)
+static int best_slot(const scores_t *s, uint32_t map)
 {
     for (int i = 0; i < s->n_best; i++)
-        if (s->best[i].level == level)
+        if (s->best[i].map == map)
             return i;
     return -1;
 }
 
-int scores_best(const scores_t *s, uint32_t level)
+int scores_best(const scores_t *s, uint32_t map)
 {
-    if (!level)
+    if (!map)
         return 0;
-    int at = best_slot(s, level);
+    int at = best_slot(s, map);
     return at < 0 ? 0 : s->best[at].score;
 }
 
-bool scores_best_set(scores_t *s, uint32_t level, int score)
+bool scores_best_set(scores_t *s, uint32_t map, int score)
 {
-    if (!level || score <= 0)
+    if (!map || score <= 0)
         return false;
 
-    int at = best_slot(s, level);
+    int at = best_slot(s, map);
     if (at >= 0) {
         if (score <= s->best[at].score)
             return false;
@@ -226,14 +226,14 @@ bool scores_best_set(scores_t *s, uint32_t level, int score)
     } else {
         if (s->n_best == SCORE_BESTS) {
             /* Full: the least recently beaten goes, which is the one at the
-             * front.  Somebody with more than SCORE_BESTS levels keeps the
+             * front.  Somebody with more than SCORE_BESTS maps keeps the
              * ones they are actually flying. */
             memmove(s->best, s->best + 1,
                     sizeof(s->best[0]) * (SCORE_BESTS - 1));
             s->n_best--;
         }
         at = s->n_best++;
-        s->best[at].level = level;
+        s->best[at].map = map;
         s->best[at].score = score;
     }
 
@@ -347,7 +347,7 @@ void scores_load(scores_t *s)
             continue;
         }
 
-        /* "BEST 3b7788af 12400" -- the level's hash and what was scored on
+        /* "BEST c22d60a3 12400" -- the map's hash and what was scored on
          * it.  File order is queue order, oldest first. */
         if (!strncmp(line, "BEST ", 5)) {
             char *end = NULL;
@@ -363,13 +363,13 @@ void scores_load(scores_t *s)
              * duplicated hash keeps the better of the two. */
             int at = -1;
             for (int i = 0; i < s->n_best; i++)
-                if (s->best[i].level == (uint32_t)h)
+                if (s->best[i].map == (uint32_t)h)
                     at = i;
             if (at >= 0) {
                 if ((int)v > s->best[at].score)
                     s->best[at].score = (int)v;
             } else if (s->n_best < SCORE_BESTS) {
-                s->best[s->n_best].level = (uint32_t)h;
+                s->best[s->n_best].map = (uint32_t)h;
                 s->best[s->n_best].score = (int)v;
                 s->n_best++;
             }
@@ -426,7 +426,7 @@ bool scores_save(const scores_t *s)
                 fprintf(f, "%s %s %d\n", board_tag[b], e->name, e->score);
         }
     for (int i = 0; i < s->n_best; i++)
-        fprintf(f, "BEST %08x %d\n", s->best[i].level, s->best[i].score);
+        fprintf(f, "BEST %08x %d\n", s->best[i].map, s->best[i].score);
 
     if (fflush(f) != 0 || ferror(f)) {
         fclose(f);

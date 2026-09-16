@@ -1,12 +1,12 @@
 # What the game requires, and what the aeroplane can do
 
 Two kinds of rule. The first kind the loader enforces, so breaking one is an
-error you will see immediately. The second kind nothing enforces: the level
+error you will see immediately. The second kind nothing enforces: the map
 loads, and it is wrong anyway.
 
 ## Rules the loader enforces
 
-From `doc/LEVEL_FORMAT.md`, refused with the line that broke them:
+From `doc/MAP_FORMAT.md`, refused with the line that broke them:
 
 | Rule | Why |
 |---|---|
@@ -24,7 +24,7 @@ From `doc/LEVEL_FORMAT.md`, refused with the line that broke them:
 
 ## Rules nothing enforces
 
-These live in `game/game.c`, not in the format. A level that breaks them loads
+These live in `game/game.c`, not in the format. A map that breaks them loads
 and plays and is quietly wrong.
 
 **The order of the buildings decides whose they are.** The game gives the
@@ -36,7 +36,7 @@ player's three, then the rest of the enemy's.
 **Runway slots are positional.** Slot 0 is the player. Slot 7 is the enemy.
 Against the computer, slots 1 and 6 are used as well; in networked play, 3 and
 4. With fewer than eight runways the game wraps (`slot % n_runways`), which
-puts enemy aircraft on your own strip — so give a level eight, four at each
+puts enemy aircraft on your own strip — so give a map eight, four at each
 end, and the arrangement works in every mode.
 
 **Fuel is derived from the map width** (`MAXFUEL = 3 × MAX_X`), so the
@@ -100,23 +100,23 @@ dramatic terrain that is still a place to fight.
 
 The world is 3000 columns and stops dead at both ends: an aeroplane that
 reaches column 0 or column 3000 stays there, against nothing, with no
-indication of why. Every level should therefore wall both ends off with a
-steep rise — `levelgen.py` does it automatically over the outer 140 columns,
+indication of why. Every map should therefore wall both ends off with a
+steep rise — `mapgen.py` does it automatically over the outer 140 columns,
 up to 186, which is high enough to read as the end of the world rather than
 as a hill worth crossing.
 
-## Checking a level
+## Checking a map
 
 ```bash
-./build/barnstormer --check LEVEL      # is it a level?      (no window)
-./build/flytest LEVEL                  # can it be flown?    (no window)
+./build/barnstormer --check MAP        # is it a map?        (no window)
+./build/flytest MAP                    # can it be flown?    (no window)
 ```
 
 `flytest` starts a real game against the computer, flies the player off the
 deck and lets the game's own autopilot try the other fields. Every aeroplane
 that tries to leave must get away: 30 above the ground and 200 columns out.
 Aircraft that never move are the reserves waiting their turn, and are not
-counted against the level.
+counted against the map.
 
-It is calibrated against the classic map, which passes. If your level does not,
-the level is wrong.
+It is calibrated against the classic map, which passes. If your map does not,
+the map is wrong.

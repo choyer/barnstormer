@@ -1,17 +1,17 @@
 /*
- * level.c -- reading and writing level files.
+ * map.c -- reading and writing map files.
  *
- * The format is specified in doc/LEVEL_FORMAT.md: UTF-8 text, one
+ * The format is specified in doc/MAP_FORMAT.md: UTF-8 text, one
  * "key value..." line per entry, terrain run-length encoded as count:height
  * pairs.  An unknown key is skipped so that a file written by a later version
  * still loads, but anything that would produce a half-valid world -- terrain
  * with holes in it, a runway on a cliff, two buildings on the same ground --
- * is refused outright, naming the line.  Levels get passed between strangers;
+ * is refused outright, naming the line.  Maps get passed between strangers;
  * a loader that limps on is worse than one that says no.
  *
- * level_load() hands back a single heap block holding the level_t and every
- * array it points at.  Those blocks are kept on a list, so level_free() can
- * tell one of ours from a static level like level_classic and refuse the
+ * map_load() hands back a single heap block holding the map_t and every
+ * array it points at.  Those blocks are kept on a list, so map_free() can
+ * tell one of ours from a static map like map_classic and refuse the
  * latter rather than call free() on it.
  */
 #define _POSIX_C_SOURCE 200809L
@@ -24,27 +24,33 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include "level.h"
+#include "map.h"
 #include "paths.h"
 
-#define LEVEL_MAGIC  "barnstormer-level"
-#define GROUND_WRAP  68     /* start a new ground line past this column */
+#define MAP_MAGIC      "barnstormer-map"
+
+/* What the header said before maps were called maps.  Read, never written:
+ * a file from an older build still loads, and saving it puts the current
+ * header on it -- which changes its hash, since the hash is taken over the
+ * canonical bytes and the header is the first of them. */
+#define MAP_MAGIC_WAS  "barnstormer-level"
+#define GROUND_WRAP    68   /* start a new ground line past this column */
 
 /* ---- error reporting ---------------------------------------------------- */
 
 static char errmsg[256];
 
-const char *level_error(void)
+const char *map_error(void)
 {
     return errmsg;
 }
 
 /* The message never names the file: the caller knows which path it asked for
- * and prefixes it, so an error reads "levels/foo.lvl: line 6: ..." exactly
+ * and prefixes it, so an error reads "maps/foo.map: line 6: ..." exactly
  * once.
  *
- * Line 0 means "no line to blame": a level held in memory rather than read
- * from a file, which is the case when level_save() validates its argument. */
+ * Line 0 means "no line to blame": a map held in memory rather than read
+ * from a file, which is the case when map_save() validates its argument. */
 static void seterr(int line, const char *fmt, ...)
 {
     char body[200];
@@ -62,27 +68,27 @@ static void seterr(int line, const char *fmt, ...)
 
 /* ---- allocation --------------------------------------------------------- */
 
-/* One block per loaded level: the level_t the caller sees, followed by the
+/* One block per loaded map: the map_t the caller sees, followed by the
  * storage its const pointers point at. */
-typedef struct level_alloc {
-    struct level_alloc *next;
-    level_t pub;
-    char name[LEVEL_NAME_MAX + 1];
-    char author[LEVEL_NAME_MAX + 1];
+typedef struct map_alloc {
+    struct map_alloc *next;
+    map_t pub;
+    char name[MAP_NAME_MAX + 1];
+    char author[MAP_NAME_MAX + 1];
     uint8_t ground[MAX_X];
-    level_runway_t runways[LEVEL_MAX_RUNWAYS];
-    level_target_t targets[MAX_TARG];
-    level_point_t oxen[MAX_OXEN];
-} level_alloc_t;
+    map_runway_t runways[MAP_MAX_RUNWAYS];
+    map_target_t targets[MAX_TARG];
+    map_point_t oxen[MAX_OXEN];
+} map_alloc_t;
 
-static level_alloc_t *loaded;
+static map_alloc_t *loaded;
 
 /* ---- validation --------------------------------------------------------- */
 
 /* Where each entry came from, so a broken rule can name its line.  NULL when
- * the level did not come from a file. */
+ * the map did not come from a file. */
 typedef struct {
-    int runway[LEVEL_MAX_RUNWAYS];
+    int runway[MAP_MAX_RUNWAYS];
     int target[MAX_TARG];
     int ox[MAX_OXEN];
 } lines_t;
@@ -92,80 +98,80 @@ static int line_of(const int *lines, int i)
     return lines ? lines[i] : 0;
 }
 
-/* The rules from doc/LEVEL_FORMAT.md, applied to a finished level.  Heights
+/* The rules from doc/MAP_FORMAT.md, applied to a finished map.  Heights
  * and enumerations are checked here as well as at parse time, because
- * level_save() runs this over a level nobody parsed. */
-static int validate(const level_t *lv, const lines_t *ln)
+ * map_save() runs this over a map nobody parsed. */
+static int validate(const map_t *lv, const lines_t *ln)
 {
     if (!lv->name || !lv->name[0]) {
-        seterr(0, "a level needs a name");
+        seterr(0, "a map needs a name");
         return -1;
     }
-    if (strlen(lv->name) > LEVEL_NAME_MAX) {
-        seterr(0, "the name is longer than %d bytes", LEVEL_NAME_MAX);
+    if (strlen(lv->name) > MAP_NAME_MAX) {
+        seterr(0, "the name is longer than %d bytes", MAP_NAME_MAX);
         return -1;
     }
-    if (lv->author && strlen(lv->author) > LEVEL_NAME_MAX) {
-        seterr(0, "the author is longer than %d bytes", LEVEL_NAME_MAX);
+    if (lv->author && strlen(lv->author) > MAP_NAME_MAX) {
+        seterr(0, "the author is longer than %d bytes", MAP_NAME_MAX);
         return -1;
     }
-    if (lv->format != LEVEL_FORMAT_VERSION) {
+    if (lv->format != MAP_FORMAT_VERSION) {
         seterr(0, "format version %u, expected %d",
-               lv->format, LEVEL_FORMAT_VERSION);
+               lv->format, MAP_FORMAT_VERSION);
         return -1;
     }
     if (lv->width != MAX_X || lv->height != MAX_Y) {
         seterr(0, "size must be %d %d in version %d",
-               MAX_X, MAX_Y, LEVEL_FORMAT_VERSION);
+               MAX_X, MAX_Y, MAP_FORMAT_VERSION);
         return -1;
     }
     if (!lv->ground) {
-        seterr(0, "the level has no terrain");
+        seterr(0, "the map has no terrain");
         return -1;
     }
 
     for (int x = 0; x < lv->width; x++) {
         int h = lv->ground[x];
-        if (h < LEVEL_GROUND_MIN || h > LEVEL_GROUND_MAX) {
+        if (h < MAP_GROUND_MIN || h > MAP_GROUND_MAX) {
             seterr(0, "height %d at column %d is outside %d..%d",
-                   h, x, LEVEL_GROUND_MIN, LEVEL_GROUND_MAX);
+                   h, x, MAP_GROUND_MIN, MAP_GROUND_MAX);
             return -1;
         }
     }
 
     /* Runways. */
-    if (lv->n_runways < LEVEL_MIN_RUNWAYS) {
-        seterr(0, "a level needs at least %d runways, found %d",
-               LEVEL_MIN_RUNWAYS, lv->n_runways);
+    if (lv->n_runways < MAP_MIN_RUNWAYS) {
+        seterr(0, "a map needs at least %d runways, found %d",
+               MAP_MIN_RUNWAYS, lv->n_runways);
         return -1;
     }
-    if (lv->n_runways > LEVEL_MAX_RUNWAYS) {
-        seterr(0, "more than %d runways", LEVEL_MAX_RUNWAYS);
+    if (lv->n_runways > MAP_MAX_RUNWAYS) {
+        seterr(0, "more than %d runways", MAP_MAX_RUNWAYS);
         return -1;
     }
     for (int i = 0; i < lv->n_runways; i++) {
-        const level_runway_t *rw = &lv->runways[i];
+        const map_runway_t *rw = &lv->runways[i];
         int at = line_of(ln ? ln->runway : NULL, i);
 
         if (rw->orient > 1) {
             seterr(at, "runway orientation %u, expected 0 or 1", rw->orient);
             return -1;
         }
-        if (rw->x + LEVEL_RUNWAY_SPAN > lv->width) {
+        if (rw->x + MAP_RUNWAY_SPAN > lv->width) {
             seterr(at, "the runway at %u runs off the end of the world",
                    rw->x);
             return -1;
         }
-        int lo = LEVEL_GROUND_MAX, hi = 0;
-        for (int x = rw->x; x < rw->x + LEVEL_RUNWAY_SPAN; x++) {
+        int lo = MAP_GROUND_MAX, hi = 0;
+        for (int x = rw->x; x < rw->x + MAP_RUNWAY_SPAN; x++) {
             int h = lv->ground[x];
             if (h < lo) lo = h;
             if (h > hi) hi = h;
         }
-        if (hi - lo > LEVEL_RUNWAY_SLOP) {
+        if (hi - lo > MAP_RUNWAY_SLOP) {
             seterr(at, "the runway at %u is not flat: %d..%d over its "
                        "%d columns, more than %d apart",
-                   rw->x, lo, hi, LEVEL_RUNWAY_SPAN, LEVEL_RUNWAY_SLOP);
+                   rw->x, lo, hi, MAP_RUNWAY_SPAN, MAP_RUNWAY_SLOP);
             return -1;
         }
     }
@@ -176,7 +182,7 @@ static int validate(const level_t *lv, const lines_t *ln)
         return -1;
     }
     for (int i = 0; i < lv->n_targets; i++) {
-        const level_target_t *tg = &lv->targets[i];
+        const map_target_t *tg = &lv->targets[i];
         int at = line_of(ln ? ln->target : NULL, i);
 
         if (tg->kind > TARGET_HANGAR) {
@@ -184,7 +190,7 @@ static int validate(const level_t *lv, const lines_t *ln)
                    tg->kind, TARGET_HANGAR);
             return -1;
         }
-        if (tg->x + LEVEL_TARGET_WIDTH > lv->width) {
+        if (tg->x + MAP_TARGET_WIDTH > lv->width) {
             seterr(at, "the building at %u runs off the end of the world",
                    tg->x);
             return -1;
@@ -193,21 +199,21 @@ static int validate(const level_t *lv, const lines_t *ln)
             int gap = (int)tg->x - (int)lv->targets[j].x;
             if (gap < 0)
                 gap = -gap;
-            if (gap < LEVEL_TARGET_WIDTH) {
+            if (gap < MAP_TARGET_WIDTH) {
                 seterr(at, "the buildings at %u and %u are less than %d "
                            "columns apart",
-                       lv->targets[j].x, tg->x, LEVEL_TARGET_WIDTH);
+                       lv->targets[j].x, tg->x, MAP_TARGET_WIDTH);
                 return -1;
             }
         }
 
-        /* A building across a landing strip is a level that wrecks itself on
+        /* A building across a landing strip is a map that wrecks itself on
          * the first frame: aircraft spawn on the strip, inside the building,
          * and it explodes before anyone has touched a key. */
         for (int j = 0; j < lv->n_runways; j++) {
-            const level_runway_t *rw = &lv->runways[j];
-            if (tg->x <= rw->x + LEVEL_RUNWAY_SPAN - 1 &&
-                tg->x + LEVEL_TARGET_WIDTH - 1 >= rw->x) {
+            const map_runway_t *rw = &lv->runways[j];
+            if (tg->x <= rw->x + MAP_RUNWAY_SPAN - 1 &&
+                tg->x + MAP_TARGET_WIDTH - 1 >= rw->x) {
                 seterr(at, "the building at %u stands on the runway at %u",
                        tg->x, rw->x);
                 return -1;
@@ -221,7 +227,7 @@ static int validate(const level_t *lv, const lines_t *ln)
         return -1;
     }
     for (int i = 0; i < lv->n_oxen; i++) {
-        const level_point_t *ox = &lv->oxen[i];
+        const map_point_t *ox = &lv->oxen[i];
         if (ox->x >= lv->width || ox->y >= lv->height) {
             seterr(line_of(ln ? ln->ox : NULL, i),
                    "the ox at %u,%u is outside the world", ox->x, ox->y);
@@ -232,18 +238,18 @@ static int validate(const level_t *lv, const lines_t *ln)
     return 0;
 }
 
-/* The same rules, for a level being built rather than read: the editor calls
+/* The same rules, for a map being built rather than read: the editor calls
  * this after every change so that it can refuse the change rather than let
  * somebody author a world that will not load. */
-int level_check(const level_t *lvl)
+int map_check(const map_t *mp)
 {
     errmsg[0] = '\0';
-    if (!lvl) {
-        seterr(0, "no level");
+    if (!mp) {
+        seterr(0, "no map");
         errno = EINVAL;
         return -1;
     }
-    if (validate(lvl, NULL) < 0) {
+    if (validate(mp, NULL) < 0) {
         errno = EINVAL;
         return -1;
     }
@@ -317,10 +323,10 @@ static bool parse_run(const char *tok, long *count, long *height)
     head[n] = '\0';
 
     return number(head, 1, MAX_X, count) &&
-           number(colon + 1, LEVEL_GROUND_MIN, LEVEL_GROUND_MAX, height);
+           number(colon + 1, MAP_GROUND_MIN, MAP_GROUND_MAX, height);
 }
 
-int level_load(const char *path, level_t **out)
+int map_load(const char *path, map_t **out)
 {
     errmsg[0] = '\0';
 
@@ -338,7 +344,7 @@ int level_load(const char *path, level_t **out)
         return -1;
     }
 
-    level_alloc_t *a = calloc(1, sizeof(*a));
+    map_alloc_t *a = calloc(1, sizeof(*a));
     lines_t *ln = calloc(1, sizeof(*ln));
     char *line = NULL;
     size_t cap = 0;
@@ -371,17 +377,17 @@ int level_load(const char *path, level_t **out)
 
         if (!seen_magic) {
             long v;
-            if (strcmp(key, LEVEL_MAGIC)) {
-                REJECT("not a barnstormer level file");
+            if (strcmp(key, MAP_MAGIC) && strcmp(key, MAP_MAGIC_WAS)) {
+                REJECT("not a barnstormer map file");
                 break;
             }
             if (!number(token(&p), 0, 1 << 20, &v)) {
                 REJECT("the header has no version number");
                 break;
             }
-            if (v != LEVEL_FORMAT_VERSION) {
+            if (v != MAP_FORMAT_VERSION) {
                 REJECT("format version %ld, expected %d",
-                       v, LEVEL_FORMAT_VERSION);
+                       v, MAP_FORMAT_VERSION);
                 break;
             }
             if (token(&p)) {
@@ -398,12 +404,12 @@ int level_load(const char *path, level_t **out)
                 REJECT("%s is empty", key);
                 break;
             }
-            if (strlen(text) > LEVEL_NAME_MAX) {
-                REJECT("%s is longer than %d bytes", key, LEVEL_NAME_MAX);
+            if (strlen(text) > MAP_NAME_MAX) {
+                REJECT("%s is longer than %d bytes", key, MAP_NAME_MAX);
                 break;
             }
             char *dst = key[0] == 'n' ? a->name : a->author;
-            snprintf(dst, LEVEL_NAME_MAX + 1, "%s", text);
+            snprintf(dst, MAP_NAME_MAX + 1, "%s", text);
             continue;
         }
 
@@ -421,12 +427,12 @@ int level_load(const char *path, level_t **out)
                 REJECT("size needs a width and a height");
                 break;
             }
-            /* Checked here rather than left to validate(), so that a level
+            /* Checked here rather than left to validate(), so that a map
              * built for a world of another size is refused at the line that
              * says so instead of at the terrain that follows it. */
             if (w != MAX_X || h != MAX_Y) {
                 REJECT("size must be %d %d in version %d",
-                       MAX_X, MAX_Y, LEVEL_FORMAT_VERSION);
+                       MAX_X, MAX_Y, MAP_FORMAT_VERSION);
                 break;
             }
             width = (int)w;
@@ -439,8 +445,8 @@ int level_load(const char *path, level_t **out)
                 long count, h;
                 if (!parse_run(tok, &count, &h)) {
                     REJECT("\"%s\" is not count:height with a height "
-                           "in %d..%d", tok, LEVEL_GROUND_MIN,
-                           LEVEL_GROUND_MAX);
+                           "in %d..%d", tok, MAP_GROUND_MIN,
+                           MAP_GROUND_MAX);
                     break;
                 }
                 if (n_ground + count > MAX_X) {
@@ -461,8 +467,8 @@ int level_load(const char *path, level_t **out)
             continue;
         } else if (!strcmp(key, "runway")) {
             long x, orient;
-            if (n_runways >= LEVEL_MAX_RUNWAYS) {
-                REJECT("more than %d runways", LEVEL_MAX_RUNWAYS);
+            if (n_runways >= MAP_MAX_RUNWAYS) {
+                REJECT("more than %d runways", MAP_MAX_RUNWAYS);
                 break;
             }
             if (!number(token(&p), 0, 0xFFFF, &x) ||
@@ -532,7 +538,7 @@ int level_load(const char *path, level_t **out)
      * would go; the others have no line to point at. */
     lineno = 0;
     if (!bad && !seen_magic)
-        REJECT("not a barnstormer level file");
+        REJECT("not a barnstormer map file");
     if (!bad && !have_size)
         REJECT("the file has no size line");
     if (!bad && n_ground != width) {
@@ -554,7 +560,7 @@ int level_load(const char *path, level_t **out)
 
     a->pub.name      = a->name;
     a->pub.author    = a->author[0] ? a->author : NULL;
-    a->pub.format    = LEVEL_FORMAT_VERSION;
+    a->pub.format    = MAP_FORMAT_VERSION;
     a->pub.width     = (uint16_t)width;
     a->pub.height    = (uint16_t)height;
     a->pub.rand_seed = seed;
@@ -580,56 +586,56 @@ int level_load(const char *path, level_t **out)
     return 0;
 }
 
-int level_free(level_t *lvl)
+int map_free(map_t *mp)
 {
     errmsg[0] = '\0';
-    if (!lvl) {
+    if (!mp) {
         errno = EINVAL;
         return -1;
     }
 
-    for (level_alloc_t **pp = &loaded; *pp; pp = &(*pp)->next) {
-        if (&(*pp)->pub != lvl)
+    for (map_alloc_t **pp = &loaded; *pp; pp = &(*pp)->next) {
+        if (&(*pp)->pub != mp)
             continue;
-        level_alloc_t *a = *pp;
+        map_alloc_t *a = *pp;
         *pp = a->next;
         free(a);
         return 0;
     }
 
-    /* A built-in level, or one already freed.  Either way, not ours. */
-    seterr(0, "that level was not loaded from a file");
+    /* A built-in map, or one already freed.  Either way, not ours. */
+    seterr(0, "that map was not loaded from a file");
     errno = EINVAL;
     return -1;
 }
 
-/* ---- the level directory ------------------------------------------------ */
+/* ---- the map directory -------------------------------------------------- */
 
-bool level_dir(char *buf, size_t n)
+bool map_dir(char *buf, size_t n)
 {
-    return sw_data_path(buf, n, "levels");
+    return sw_data_path(buf, n, "maps");
 }
 
-static bool ends_in_lvl(const char *name)
+static bool ends_in_map(const char *name)
 {
     size_t n = strlen(name);
-    return n > 4 && !strcmp(name + n - 4, ".lvl");
+    return n > 4 && !strcmp(name + n - 4, ".map");
 }
 
 static int by_name(const void *a, const void *b)
 {
-    const level_info_t *x = a, *y = b;
+    const map_info_t *x = a, *y = b;
     int c = strcasecmp(x->name, y->name);
     return c ? c : strcmp(x->path, y->path);
 }
 
-int level_list(level_info_t *out, int max, int *skipped)
+int map_list(map_info_t *out, int max, int *skipped)
 {
     if (skipped)
         *skipped = 0;
 
     char dir[512];
-    if (!level_dir(dir, sizeof(dir)))
+    if (!map_dir(dir, sizeof(dir)))
         return 0;
 
     DIR *d = opendir(dir);
@@ -639,7 +645,7 @@ int level_list(level_info_t *out, int max, int *skipped)
     int n = 0;
     struct dirent *e;
     while ((e = readdir(d)) != NULL && n < max) {
-        if (e->d_name[0] == '.' || !ends_in_lvl(e->d_name))
+        if (e->d_name[0] == '.' || !ends_in_map(e->d_name))
             continue;
 
         char path[512];
@@ -647,10 +653,10 @@ int level_list(level_info_t *out, int max, int *skipped)
             (int)sizeof(path))
             continue;
 
-        /* Loaded rather than peeked at, so the list only offers levels that
+        /* Loaded rather than peeked at, so the list only offers maps that
          * will actually start when they are chosen. */
-        level_t *lv = NULL;
-        if (level_load(path, &lv) < 0) {
+        map_t *lv = NULL;
+        if (map_load(path, &lv) < 0) {
             if (skipped)
                 (*skipped)++;
             continue;
@@ -660,12 +666,12 @@ int level_list(level_info_t *out, int max, int *skipped)
         snprintf(out[n].name, sizeof(out[n].name), "%s", lv->name);
         snprintf(out[n].author, sizeof(out[n].author), "%s",
                  lv->author ? lv->author : "");
-        /* Hashed while the level is in hand: it is what anything keeping a
-         * record per level has to key on, and it costs one pass here
+        /* Hashed while the map is in hand: it is what anything keeping a
+         * record per map has to key on, and it costs one pass here
          * instead of a second load later. */
-        out[n].hash = level_hash(lv);
+        out[n].hash = map_hash(lv);
         n++;
-        level_free(lv);
+        map_free(lv);
     }
     closedir(d);
 
@@ -676,11 +682,11 @@ int level_list(level_info_t *out, int max, int *skipped)
 /* ---- saving ------------------------------------------------------------- */
 
 /* The canonical serialisation: no comments, terrain wrapped at a fixed
- * column, sections in a fixed order.  doc/LEVEL_FORMAT.md's hash is defined
+ * column, sections in a fixed order.  doc/MAP_FORMAT.md's hash is defined
  * over exactly these bytes. */
 /* Where a serialisation goes: a file, or a running hash of the same bytes.
- * One writer serves both, which is what makes doc/LEVEL_FORMAT.md's promise
- * -- that the hash is taken over exactly what level_save() writes -- true by
+ * One writer serves both, which is what makes doc/MAP_FORMAT.md's promise
+ * -- that the hash is taken over exactly what map_save() writes -- true by
  * construction rather than by two pieces of code agreeing to be careful. */
 typedef struct {
     FILE *f;              /* NULL when hashing                            */
@@ -714,9 +720,9 @@ static int emitf(sink_t *s, const char *fmt, ...)
     return n;
 }
 
-static void emit(sink_t *s, const level_t *lv)
+static void emit(sink_t *s, const map_t *lv)
 {
-    emitf(s, "%s %d\n", LEVEL_MAGIC, LEVEL_FORMAT_VERSION);
+    emitf(s, "%s %d\n", MAP_MAGIC, MAP_FORMAT_VERSION);
     emitf(s, "name %s\n", lv->name);
     if (lv->author && lv->author[0])
         emitf(s, "author %s\n", lv->author);
@@ -758,35 +764,35 @@ static void emit(sink_t *s, const level_t *lv)
         emitf(s, "ox %u %u\n", lv->oxen[i].x, lv->oxen[i].y);
 }
 
-uint32_t level_hash(const level_t *lvl)
+uint32_t map_hash(const map_t *mp)
 {
     /* Checked first because the serialiser trusts width and the arrays, and
-     * because two peers comparing hashes of things that are not levels have
-     * nothing to talk about.  Zero means "no hash", not "empty level". */
-    if (!lvl || level_check(lvl) < 0)
+     * because two peers comparing hashes of things that are not maps have
+     * nothing to talk about.  Zero means "no hash", not "empty map". */
+    if (!mp || map_check(mp) < 0)
         return 0;
 
     sink_t s = { .f = NULL, .hash = FNV_OFFSET };
-    emit(&s, lvl);
+    emit(&s, mp);
     return s.hash;
 }
 
-int level_save(const char *path, const level_t *lvl)
+int map_save(const char *path, const map_t *mp)
 {
     errmsg[0] = '\0';
 
-    if (!path || !lvl) {
+    if (!path || !mp) {
         seterr(0, "nothing to save");
         errno = EINVAL;
         return -1;
     }
-    if (validate(lvl, NULL) < 0) {
+    if (validate(mp, NULL) < 0) {
         errno = EINVAL;
         return -1;
     }
 
     /* Write beside the target and rename, so an interrupted write cannot
-     * truncate a level that was already there. */
+     * truncate a map that was already there. */
     size_t n = strlen(path) + sizeof(".tmp");
     char *tmp = malloc(n);
     if (!tmp) {
@@ -806,7 +812,7 @@ int level_save(const char *path, const level_t *lvl)
     }
 
     sink_t out = { .f = f, .hash = 0 };
-    emit(&out, lvl);
+    emit(&out, mp);
 
     if (fflush(f) != 0 || ferror(f) || fclose(f) != 0) {
         int e = errno ? errno : EIO;

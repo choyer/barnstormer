@@ -11,7 +11,7 @@ static const int slot_single[MAX_PLYR]   = { 0, 7, 0, 0 };
 static const int slot_computer[MAX_PLYR] = { 0, 7, 1, 6 };
 static const int slot_net[MAX_PLYR]      = { 0, 7, 3, 4 };
 
-int level_runway_slot(playmode_t mode, int i)
+int map_runway_slot(playmode_t mode, int i)
 {
     if (i < 0 || i >= MAX_PLYR)
         i = 0;
@@ -43,7 +43,7 @@ static object_t *init_plane(game_t *g, object_t *reuse, int slot)
     if (!ob)
         return NULL;
 
-    const level_runway_t *rw = &g->level->runways[slot % g->level->n_runways];
+    const map_runway_t *rw = &g->map->runways[slot % g->map->n_runways];
 
     ob->type = OBJ_PLANE;
     ob->x = rw->x;
@@ -141,7 +141,7 @@ void sw_init_comp(game_t *g, object_t *reuse, int slot)
 int game_pad_height(const uint8_t *ground, int x)
 {
     int minh = MAX_Y, maxh = 0;
-    for (int i = x; i < x + LEVEL_TARGET_WIDTH; i++) {
+    for (int i = x; i < x + MAP_TARGET_WIDTH; i++) {
         int gx = i < 0 ? 0 : (i >= MAX_X ? MAX_X - 1 : i);
         int h = ground[gx];
         if (h > maxh) maxh = h;
@@ -155,14 +155,14 @@ int game_pad_height(const uint8_t *ground, int x)
 
 static void init_targets(game_t *g)
 {
-    const level_t *lv = g->level;
+    const map_t *lv = g->map;
 
     /* Single player: the three buildings either side of centre are the
      * player's own; the rest belong to the enemy and must all be levelled.
      *
      * Both counts are tallied as the buildings go up rather than assumed from
-     * MAX_TARG, because an authored level (doc/LEVEL_FORMAT.md) may carry
-     * fewer than twenty -- and a level whose counter starts higher than the
+     * MAX_TARG, because an authored map (doc/MAP_FORMAT.md) may carry
+     * fewer than twenty -- and a map whose counter starts higher than the
      * number of buildings on it can never be cleared.  The player's own stay
      * at zero: flattening them is allowed and costs nothing but the score. */
     g->numtarg[0] = 0;
@@ -175,7 +175,7 @@ static void init_targets(game_t *g)
         g->targets[i] = ob;
 
         int minx = lv->targets[i].x;
-        int maxx = minx + LEVEL_TARGET_WIDTH - 1;
+        int maxx = minx + MAP_TARGET_WIDTH - 1;
         int aveh = game_pad_height(g->ground, minx);
 
         ob->x = minx;
@@ -207,15 +207,15 @@ static void init_oxen(game_t *g)
             g->targets[MAX_TARG + i] = NULL;
         return;
     }
-    for (int i = 0; i < g->level->n_oxen && i < MAX_OXEN; i++) {
+    for (int i = 0; i < g->map->n_oxen && i < MAX_OXEN; i++) {
         object_t *ob = obj_alloc(g);
         if (!ob)
             return;
         g->targets[MAX_TARG + i] = ob;
         ob->type = OBJ_OX;
         ob->state = ST_STANDING;
-        ob->x = g->level->oxen[i].x;
-        ob->y = g->level->oxen[i].y;
+        ob->x = g->map->oxen[i].x;
+        ob->y = g->map->oxen[i].y;
         ob->owner = ob;
         ob->symw = ob->symh = 16;
         ob->sprite_set = SPRITE_OX;
@@ -624,12 +624,12 @@ static void reset_pool(game_t *g)
 
 static void build_world(game_t *g)
 {
-    memcpy(g->ground, g->level->ground, MAX_X);
+    memcpy(g->ground, g->map->ground, MAX_X);
     reset_pool(g);
 
-    sw_init_player(g, NULL, level_runway_slot(g->mode, 0));
+    sw_init_player(g, NULL, map_runway_slot(g->mode, 0));
     for (int i = 1; i < MAX_PLYR; i++)
-        sw_init_comp(g, NULL, level_runway_slot(g->mode, i));
+        sw_init_comp(g, NULL, map_runway_slot(g->mode, i));
 
     init_targets(g);
     init_oxen(g);
@@ -651,18 +651,18 @@ static void build_world(game_t *g)
     g->restarted = true;
 }
 
-void game_start(game_t *g, const level_t *level, playmode_t mode, int gamenum)
+void game_start(game_t *g, const map_t *map, playmode_t mode, int gamenum)
 {
     bool sound_was_on = g->sound_on;
 
     memset(g, 0, sizeof(*g));
-    g->level = level;
+    g->map = map;
     g->mode = mode;
     g->gamenum = gamenum;
     g->player = 0;
     g->n_players = 1;
     g->maxcrash = MAXCRASH;
-    g->explseed = level->rand_seed ? level->rand_seed : 7491;
+    g->explseed = map->rand_seed ? map->rand_seed : 7491;
     g->randseed = 74917777u;
     g->sound_on = sound_was_on;
     g->sound_type = g->sound_parm = S_NONE;

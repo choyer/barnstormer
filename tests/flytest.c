@@ -1,7 +1,7 @@
 /*
- * flytest.c -- fly a level before anyone else has to.
+ * flytest.c -- fly a map before anyone else has to.
  *
- * A level can load, obey every rule in doc/LEVEL_FORMAT.md and still be
+ * A map can load, obey every rule in doc/MAP_FORMAT.md and still be
  * unflyable: a building in the take-off path, a hillside that starts too soon
  * after the strip, a field facing the edge of the world.  Nothing catches
  * that except flying it.
@@ -12,10 +12,10 @@
  * a field can be operated from -- and reports, for each aeroplane, whether it
  * got away from its own aerodrome.
  *
- *     flytest LEVEL...      exit 0 if every field can be flown out of
+ *     flytest MAP...      exit 0 if every field can be flown out of
  *
  * The bar is deliberately low: away means airborne by more than a building's
- * height and 200 columns from where it started.  A level that cannot manage
+ * height and 200 columns from where it started.  A map that cannot manage
  * that is broken rather than hard.
  */
 #include <stdio.h>
@@ -57,7 +57,7 @@ static uint16_t scripted(game_t *g, object_t *p)
     return k;
 }
 
-static bool fly(const level_t *lv, const char *path)
+static bool fly(const map_t *lv, const char *path)
 {
     game_t *g = calloc(1, sizeof(*g));
     /* Against the computer, so the other fields have aircraft on them and the
@@ -115,21 +115,21 @@ static bool fly(const level_t *lv, const char *path)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: flytest LEVEL...\n");
+        fprintf(stderr, "usage: flytest MAP...\n");
         return 2;
     }
 
     int bad = 0;
     for (int i = 1; i < argc; i++) {
-        level_t *lv = NULL;
-        if (level_load(argv[i], &lv) < 0) {
-            fprintf(stderr, "%s: %s\n", argv[i], level_error());
+        map_t *lv = NULL;
+        if (map_load(argv[i], &lv) < 0) {
+            fprintf(stderr, "%s: %s\n", argv[i], map_error());
             bad++;
             continue;
         }
         if (!fly(lv, argv[i]))
             bad++;
-        level_free(lv);
+        map_free(lv);
     }
     return bad ? 1 : 0;
 }

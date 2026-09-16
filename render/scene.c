@@ -547,7 +547,7 @@ static const char *const title_menu[] = {
     "NOVICE PILOT",
     "SINGLE PLAYER",
     "AGAINST THE COMPUTER",
-    NULL,            /* the level row, written per frame from its name */
+    NULL,            /* the map row, written per frame from its name */
 };
 const int sw_title_menu_len = 4;
 
@@ -638,7 +638,7 @@ static void ctl_row_draw(framebuf_t *fb, int x, int y, int sc,
 }
 
 void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
-                  int menu_sel, const char *level_name)
+                  int menu_sel, const char *map_name)
 {
     draw_sky(fb, c);
 
@@ -647,16 +647,16 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
     if (ts > 4) ts = 4;
 
     /* The last row says which world the three above it will be flown on. */
-    char level_row[40];
-    snprintf(level_row, sizeof(level_row), "Play Level: %.22s",
-             level_name ? level_name : "THE CLASSIC MAP");
+    char map_row[40];
+    snprintf(map_row, sizeof(map_row), "Play Map: %.22s",
+             map_name ? map_name : "THE CLASSIC MAP");
 
     /* The rows carry no marker of their own: it is drawn in the margin, so
      * each row is centred on the words rather than on the words plus two
      * characters of gutter. */
     const char *menu[4];
     for (int i = 0; i < sw_title_menu_len; i++)
-        menu[i] = title_menu[i] ? title_menu[i] : level_row;
+        menu[i] = title_menu[i] ? title_menu[i] : map_row;
 
     title_line_t lines[] = {
         { .text = "SOPWITH",     .scale = 4, .pal = PAL_TEAM1  },
@@ -817,8 +817,8 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
     char rows[SCORE_ROWS][32];
 
     snprintf(scoreline, sizeof(scoreline), "FINAL SCORE %d", v->final_score);
-    snprintf(bestline, sizeof(bestline), "YOUR BEST ON THIS LEVEL %d",
-             v->level_best);
+    snprintf(bestline, sizeof(bestline), "YOUR BEST ON THIS MAP %d",
+             v->map_best);
     for (int i = 0; i < SCORE_ROWS; i++)
         snprintf(rows[i], sizeof(rows[i]), "%2d  %s %8d",
                  i + 1, v->table->e[i].name, v->table->e[i].score);
@@ -844,8 +844,8 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
             lines[n++] = (title_line_t){ .text = "NOT RANKED", .scale = 1,
                                          .pal = PAL_HUD_DIM, .gap = 0 };
         /* A run the boards will not take still has something to beat: what
-         * this player has managed on this level before. */
-        if (!v->ranked && v->level_best > 0)
+         * this player has managed on this map before. */
+        if (!v->ranked && v->map_best > 0)
             lines[n++] = (title_line_t){ .text = bestline, .scale = 1,
                                          .pal = PAL_TEAM1, .gap = 0 };
     }
@@ -952,19 +952,19 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
     }
 }
 
-/* ---- the level editor -------------------------------------------------- */
+/* ---- the map editor ---------------------------------------------------- */
 
 /* The terrain the game will actually build: buildings stand on pads it levels
  * under them, so the editor shows those rather than the raw height field it
  * is storing.  Buildings are at least 16 columns apart, so no pad can disturb
  * another and the order they are applied in does not matter. */
-static void bake_terrain(const level_t *lv, uint8_t *out)
+static void bake_terrain(const map_t *lv, uint8_t *out)
 {
     memcpy(out, lv->ground, MAX_X);
     for (int i = 0; i < lv->n_targets; i++) {
         int x = lv->targets[i].x;
         int h = game_pad_height(lv->ground, x);
-        for (int j = x; j < x + LEVEL_TARGET_WIDTH && j < MAX_X; j++)
+        for (int j = x; j < x + MAP_TARGET_WIDTH && j < MAX_X; j++)
             out[j] = (uint8_t)h;
     }
 }
@@ -972,8 +972,8 @@ static void bake_terrain(const level_t *lv, uint8_t *out)
 /* Scenery, drawn through the same path the game uses: a building's sprite
  * frame is its kind, and the three either side of centre are the player's,
  * exactly as init_targets() decides it. */
-static void draw_level_scenery(framebuf_t *fb, const render_ctx_t *c,
-                               const level_t *lv, double left)
+static void draw_map_scenery(framebuf_t *fb, const render_ctx_t *c,
+                             const map_t *lv, double left)
 {
     for (int i = 0; i < lv->n_targets; i++) {
         object_t ob = {
@@ -1007,13 +1007,13 @@ static void draw_level_scenery(framebuf_t *fb, const render_ctx_t *c,
 /* Runways are invisible in the game -- they are just flat ground -- so the
  * editor has to draw them, or they cannot be placed with any confidence. */
 static void draw_runways(framebuf_t *fb, const render_ctx_t *c,
-                         const level_t *lv, const uint8_t *baked, double left)
+                         const map_t *lv, const uint8_t *baked, double left)
 {
     int s = c->scale;
 
     for (int i = 0; i < lv->n_runways; i++) {
         int rx = lv->runways[i].x;
-        if (rx + LEVEL_RUNWAY_SPAN < left || rx > left + c->view_w)
+        if (rx + MAP_RUNWAY_SPAN < left || rx > left + c->view_w)
             continue;
 
         int h = baked[rx < MAX_X ? rx : MAX_X - 1];
@@ -1021,13 +1021,13 @@ static void draw_runways(framebuf_t *fb, const render_ctx_t *c,
         int x0 = screen_x(c, left, rx);
         uint32_t col = sw_palette[i < 2 ? PAL_HUD : PAL_HUD_DIM];
 
-        fb_rect(fb, x0, y - s, LEVEL_RUNWAY_SPAN * s, s, col);
+        fb_rect(fb, x0, y - s, MAP_RUNWAY_SPAN * s, s, col);
 
         /* A tick at the end an aircraft points towards. */
-        int tip = lv->runways[i].orient ? x0 : x0 + (LEVEL_RUNWAY_SPAN - 1) * s;
+        int tip = lv->runways[i].orient ? x0 : x0 + (MAP_RUNWAY_SPAN - 1) * s;
         fb_rect(fb, tip, y - 4 * s, s, 4 * s, col);
 
-        /* At most LEVEL_MAX_RUNWAYS of them, so the tag is one digit. */
+        /* At most MAP_MAX_RUNWAYS of them, so the tag is one digit. */
         char tag[2] = { (char)('1' + i), '\0' };
         fb_text(fb, x0, y - 11 * s, s, col, tag);
     }
@@ -1045,7 +1045,7 @@ static void draw_cursor(framebuf_t *fb, const render_ctx_t *c,
     fb_rect(fb, cx, top, s, bottom - top, sw_palette[PAL_HUD_DIM]);
 
     if (v->carry_w > 0) {
-        /* What is being carried is already in the level and drawn there, so
+        /* What is being carried is already in the map and drawn there, so
          * this only has to say which one it is. */
         int h = baked[v->carry_x];
         int x0 = screen_x(c, left, v->carry_x);
@@ -1107,7 +1107,7 @@ static void draw_edit_radar(framebuf_t *fb, const editview_t *v,
         fb_rect(fb, x + col, y + h - gh, 1, gh, sw_palette[PAL_GROUND]);
     }
 
-    const level_t *lv = v->level;
+    const map_t *lv = v->map;
     for (int i = 0; i < lv->n_runways; i++) {
         int bx = x + (int)((int64_t)lv->runways[i].x * w / MAX_X);
         fb_rect(fb, bx, y + h - 3, 2, 3, sw_palette[i < 2 ? PAL_HUD
@@ -1141,7 +1141,7 @@ static void draw_edit_radar(framebuf_t *fb, const editview_t *v,
 void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
 {
     static uint8_t baked[MAX_X];
-    bake_terrain(v->level, baked);
+    bake_terrain(v->map, baked);
 
     double left = v->cursor - c->view_w / 2.0;
     double max = MAX_X - c->view_w;
@@ -1151,8 +1151,8 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
 
     draw_sky(fb, c);
     draw_ground(fb, c, baked, left);
-    draw_runways(fb, c, v->level, baked, left);
-    draw_level_scenery(fb, c, v->level, left);
+    draw_runways(fb, c, v->map, baked, left);
+    draw_map_scenery(fb, c, v->map, left);
     draw_cursor(fb, c, v, baked, left);
 
     /* ---- the panel ---- */
@@ -1194,8 +1194,8 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
     fb_text(fb, gx, gy + rowh, ts, sw_palette[PAL_HUD_DIM], buf);
 
     snprintf(buf, sizeof(buf), "%s%.20s%s%.14s", v->dirty ? "*" : " ",
-             v->level->name, v->level->author ? " BY " : "",
-             v->level->author ? v->level->author : "");
+             v->map->name, v->map->author ? " BY " : "",
+             v->map->author ? v->map->author : "");
     fb_text(fb, gx, gy + 2 * rowh, ts,
             sw_palette[v->dirty ? PAL_HUD : PAL_HUD_DIM], buf);
 
@@ -1232,7 +1232,7 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
     }
 }
 
-/* ---- choosing a level -------------------------------------------------- */
+/* ---- choosing a map ---------------------------------------------------- */
 
 /* The list is a table with fixed columns rather than centred lines: a name
  * in one, its author in the next, the player's best on it in the third, so
@@ -1246,7 +1246,7 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
 #define PICK_ROW_CHARS (2 + PICK_NAME_W + 4 + PICK_AUTHOR_W + 4 + PICK_BEST_W)
 
 /* The list is a viewport of a fixed number of rows whether or not there are
- * that many levels, so the heading, the rule under it and the keys below do
+ * that many maps, so the heading, the rule under it and the keys below do
  * not move as the directory fills up or the list scrolls.  Eight rows is
  * what fits under the heading at the largest text size on a 1080-tall
  * screen; past that the list scrolls rather than the layout growing. */
@@ -1269,7 +1269,7 @@ static void pick_arrow(framebuf_t *fb, int x, int y, int s, bool up,
 
 /* `src` left-aligned in a column exactly `w` characters wide, with a '~' in
  * the last of them when something had to be cut, so a truncated name looks
- * truncated rather than like a level called something else. */
+ * truncated rather than like a map called something else. */
 static void pick_col(char *dst, size_t n, int w, const char *src)
 {
     snprintf(dst, n, "%-*.*s", w, w, src);
@@ -1285,7 +1285,7 @@ static void pick_row(char *dst, size_t n, bool sel, const char *name,
 
     pick_col(nm, sizeof(nm), PICK_NAME_W, name);
     pick_col(au, sizeof(au), PICK_AUTHOR_W, author ? author : "");
-    /* A level nobody has finished shows a dash rather than a nought: no
+    /* A map nobody has finished shows a dash rather than a nought: no
      * score yet is not a score of nothing.  The column is as wide as any
      * score the game can produce, so nothing is ever cut off here. */
     if (best > 0)
@@ -1296,12 +1296,12 @@ static void pick_row(char *dst, size_t n, bool sel, const char *name,
     snprintf(dst, n, "%s%s    %s    %s", sel ? "> " : "  ", nm, au, sc);
 }
 
-void render_levels(framebuf_t *fb, const render_ctx_t *c,
-                   const levelpick_t *v)
+void render_maps(framebuf_t *fb, const render_ctx_t *c,
+                 const mappick_t *v)
 {
     draw_sky(fb, c);
 
-    /* PICK_ROWS at a time, scrolled to keep the chosen one in view: a level
+    /* PICK_ROWS at a time, scrolled to keep the chosen one in view: a map
      * directory can be longer than the viewport. */
     int rows = v->n + 1;                    /* the classic map, then them  */
     int first = v->sel - PICK_ROWS / 2;
@@ -1311,16 +1311,16 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
     if (last > rows) last = rows;
 
     /* Build the rows first, so the layout can be measured against the real
-     * text rather than against a guess at how long a level name is.  They
-     * arrive from level_list() sorted by name. */
+     * text rather than against a guess at how long a map name is.  They
+     * arrive from map_list() sorted by name. */
     char row[PICK_ROWS][PICK_ROW_CHARS + 24];
     int n_rows = 0;
     for (int i = first; i < last; i++, n_rows++) {
         if (i == 0)
             /* Row 0 is the built-in map rather than a file, so its name and
-             * author are named here.  level_classic carries no author of its
+             * author are named here.  map_classic carries no author of its
              * own: that would go into the canonical form and move the hash
-             * peers compare (doc/LEVEL_FORMAT.md). */
+             * peers compare (doc/MAP_FORMAT.md). */
             pick_row(row[n_rows], sizeof(row[0]), v->sel == 0,
                      "THE CLASSIC MAP", "DAVID L. CLARK", v->best_classic);
         else
@@ -1329,13 +1329,13 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
                      v->best ? v->best[i - 1] : 0);
     }
 
-    const char *head = "CHOOSE A LEVEL";
+    const char *head = "CHOOSE A MAP";
 
     /* Names the columns the rows below are printed in, at the same
      * character offsets pick_row() puts them. */
     char cols[PICK_ROW_CHARS + 8];
     snprintf(cols, sizeof(cols), "  %-*s    %-*s    %*s",
-             PICK_NAME_W, "LEVEL", PICK_AUTHOR_W, "AUTHOR",
+             PICK_NAME_W, "MAP", PICK_AUTHOR_W, "AUTHOR",
              PICK_BEST_W, "BEST");
 
     /* The same key/action pairing the title screen's control block uses. */
@@ -1349,7 +1349,7 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
                  v->skipped, v->skipped == 1 ? "" : "S");
     if (v->n == 0) {
         snprintf(where, sizeof(where), "PUT THEM IN %s", v->dir ? v->dir : "?");
-        snprintf(how, sizeof(how), "OR MAKE ONE:  barnstormer --edit NAME.lvl");
+        snprintf(how, sizeof(how), "OR MAKE ONE:  barnstormer --edit NAME.map");
     }
 
     /* Shrink until it all fits, the way the title screen does. */
@@ -1362,7 +1362,7 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
     int heads;
     int rowh, total, widest, listw;
     for (;;) {
-        /* One line a level now that the author shares it, at the base text
+        /* One line a map now that the author shares it, at the base text
          * size: a directory of them reads as a list rather than a stack of
          * headlines. */
         rowh = 11 * ts;
@@ -1410,7 +1410,7 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
     y += 8 * ts;
 
     /* The viewport is PICK_ROWS tall whether or not there are that many
-     * levels, so nothing below it moves as the list scrolls. */
+     * maps, so nothing below it moves as the list scrolls. */
     int list_y = y;
     for (int i = 0; i < n_rows; i++)
         fb_text(fb, lx, list_y + i * rowh, ts,

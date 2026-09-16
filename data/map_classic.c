@@ -3,7 +3,7 @@
  * Copyright (C) 1984-2000 David L. Clark.
  * See LICENSE.origsopwith.txt.
  */
-#include "level.h"
+#include "map.h"
 
 static const uint8_t classic_ground[MAX_X] = {
     199,199,199,199,199,199,199,199,199,199,199,199,199,199,199,199,199,199,199,199,
@@ -159,8 +159,8 @@ static const uint8_t classic_ground[MAX_X] = {
 };
 
 /* Eight runway slots.  Which of them are used, and by whom,
- * depends on the play mode; see level_runway_slot().          */
-static const level_runway_t classic_runways[] = {
+ * depends on the play mode; see map_runway_slot().            */
+static const map_runway_t classic_runways[] = {
     { 1270, 0 },
     {  588, 0 },
     { 1330, 0 },
@@ -171,7 +171,7 @@ static const level_runway_t classic_runways[] = {
     { 1720, 1 },
 };
 
-static const level_target_t classic_targets[] = {
+static const map_target_t classic_targets[] = {
     {  191, 1 },
     {  284, 3 },
     {  409, 1 },
@@ -194,14 +194,14 @@ static const level_target_t classic_targets[] = {
     { 2763, 1 },
 };
 
-static const level_point_t classic_oxen[] = {
+static const map_point_t classic_oxen[] = {
     { 1376,  80 },
     { 1608,  91 },
 };
 
-const level_t level_classic = {
+const map_t map_classic = {
     .name       = "Classic",
-    .format     = LEVEL_FORMAT_VERSION,
+    .format     = MAP_FORMAT_VERSION,
     .width      = MAX_X,
     .height     = MAX_Y,
     .rand_seed  = 7491,

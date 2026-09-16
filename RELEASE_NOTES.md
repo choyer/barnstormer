@@ -11,61 +11,72 @@ for sound. No toolkit, no GL, no SDL.
 
 ## Changes in 1.4.0
 
-### Build your own levels
+### Build your own maps
 
-`barnstormer --edit my-field.lvl` opens a level editor, or starts a level if
+`barnstormer --edit my-field.map` opens a map editor, or starts a map if
 that file is not there yet. A terrain brush that raises, lowers, smooths and
-flattens; the four building types, runways and oxen; the level's name and
+flattens; the four building types, runways and oxen; the map's name and
 author typed in place; `g` to pick something up and carry it somewhere else;
 and `Tab` to fly what you are looking at, `Tab` again to come back.
 
-The level under construction is always a level. Every change is checked
+The map under construction is always a map. Every change is checked
 against the loader's own rules and undone if it would break one, with the
 reason on the status line -- "cannot raise: the runway at 400 is not flat".
 So the test flight is always available, and what you save always loads.
 
 ### Playing them
 
-Levels live in `~/.local/share/barnstormer/levels`, and the title screen's
+Maps live in `~/.local/share/barnstormer/maps`, and the title screen's
 fourth row opens a picker over them: it offers the ones that load, sorted by
 name, and says how many files are there and refusing rather than hiding them.
-`barnstormer --level FILE` flies one straight from the command line.
+`barnstormer --map FILE` flies one straight from the command line.
 
-Runs on an authored level are deliberately not ranked. The high score boards
-are three columns of scores made on the classic map, and a level with four
+Runs on an authored map are deliberately not ranked. The high score boards
+are three columns of scores made on the classic map, and a map with four
 buildings and no enemy would top them without meaning anything.
 
-### The level file
+### The map file
 
 Plain text, hand-editable and diffable, specified in
-[doc/LEVEL_FORMAT.md](doc/LEVEL_FORMAT.md): a run-length encoded height field
+[doc/MAP_FORMAT.md](doc/MAP_FORMAT.md): a run-length encoded height field
 and the placement of runways, buildings and cattle. The loader is strict --
-levels get passed between strangers, and a file that would make a broken world
+maps get passed between strangers, and a file that would make a broken world
 is refused with the line that is wrong rather than loaded half-valid.
 
-`level_hash()` is FNV-1a over the canonical form, printed when the editor
-writes a file and when `--level` loads one, so two people can check they hold
-the same level however their copies are laid out. The classic map is
-`3b7788af`.
+`map_hash()` is FNV-1a over the canonical form, printed when the editor
+writes a file and when `--map` loads one, so two people can check they hold
+the same map however their copies are laid out. The classic map is
+`c22d60a3`.
 
-### A best per level
+### A best per map
 
 The three boards stay what they are: scores flown on the classic map. A run
-on a level somebody wrote is still not ranked against them -- an easy map
+on a map somebody wrote is still not ranked against them -- an easy map
 would top them without meaning anything -- but it is no longer thrown away
-either. Each level keeps the best score you have flown on it, stored against
-`level_hash()` rather than a filename, so two copies of a level share a best
-and an edited level is a different level. The picker shows it in a **BEST**
+either. Each map keeps the best score you have flown on it, stored against
+`map_hash()` rather than a filename, so two copies of a map share a best
+and an edited map is a different map. The picker shows it in a **BEST**
 column beside the author, and the end-of-run screen says what there is to
 beat when the run did not rank.
 
-Sixty-four levels are remembered; past that the least recently beaten makes
+Sixty-four maps are remembered; past that the least recently beaten makes
 way, so the ones being flown are the ones kept.
+
+### Maps, not levels
+
+What was a level is now a map: the menus say so, the command-line option is
+`-m, --map`, and the files live in `~/.local/share/barnstormer/maps` with a
+`.map` extension. Nothing is migrated for you -- a `levels` directory from
+an older build is not read, so move what is in it across and rename the
+files. They still load once they are there: the reader accepts the
+superseded `barnstormer-level 1` header, though it never writes it. Because
+that header is part of the bytes that are hashed, every map's hash changed
+with the rename; the classic map is now `c22d60a3`.
 
 ### Fixed
 
 The count of enemy buildings still standing was a constant rather than a count
-of the buildings on the level, so any level with fewer than twenty of them
+of the buildings on the map, so any map with fewer than twenty of them
 could never be cleared and the `TARGETS` readout started wrong. It is now
 tallied as the buildings go up. The classic map is unaffected -- it has
 exactly twenty.

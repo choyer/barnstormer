@@ -1,11 +1,11 @@
 /*
  * flightprobe.c -- what the aeroplane can actually do, in numbers.
  *
- * A level can obey every rule in doc/LEVEL_FORMAT.md and still be unflyable:
+ * A map can obey every rule in doc/MAP_FORMAT.md and still be unflyable:
  * a slope no aircraft can climb, a runway with a mountain at the end of it, a
  * valley too narrow to turn around in.  Those limits are not written down
  * anywhere -- they fall out of the flight model -- so this measures them, and
- * the numbers go into the level-design skill where a generator can use them.
+ * the numbers go into the map-design skill where a generator can use them.
  *
  * Not a test: nothing here passes or fails.  `make probe` prints the table.
  * Re-run it if the flight model ever changes, because everything built on
@@ -25,9 +25,9 @@
 #define RUNWAY_X   400
 
 static uint8_t ground[MAX_X];
-static level_runway_t runways[2] = { { RUNWAY_X, 0 }, { 2400, 1 } };
-static level_t probe_level = {
-    .name = "flight probe", .format = LEVEL_FORMAT_VERSION,
+static map_runway_t runways[2] = { { RUNWAY_X, 0 }, { 2400, 1 } };
+static map_t probe_map = {
+    .name = "flight probe", .format = MAP_FORMAT_VERSION,
     .width = MAX_X, .height = MAX_Y, .rand_seed = 7491,
     .ground = ground, .runways = runways, .n_runways = 2,
 };
@@ -66,7 +66,7 @@ static bool flying(const object_t *p)
 static void probe_takeoff(void)
 {
     game_t *g = calloc(1, sizeof(*g));
-    game_start(g, &probe_level, PLAY_SINGLE, 0);
+    game_start(g, &probe_map, PLAY_SINGLE, 0);
     object_t *p = game_player(g);
 
     int start = p->x;
@@ -106,7 +106,7 @@ static void probe_takeoff(void)
 static void probe_climb(int angle)
 {
     game_t *g = calloc(1, sizeof(*g));
-    game_start(g, &probe_level, PLAY_SINGLE, 0);
+    game_start(g, &probe_map, PLAY_SINGLE, 0);
     object_t *p = game_player(g);
 
     /* Up to a working height, level off, and let the speed come back. */
@@ -151,7 +151,7 @@ static void probe_climb(int angle)
 static void probe_loop(void)
 {
     game_t *g = calloc(1, sizeof(*g));
-    game_start(g, &probe_level, PLAY_SINGLE, 0);
+    game_start(g, &probe_map, PLAY_SINGLE, 0);
     object_t *p = game_player(g);
 
     for (int t = 0; t < 900 && flying(p); t++) {
@@ -200,7 +200,7 @@ static bool probe_slope(int run_per_rise, int summit)
     }
 
     game_t *g = calloc(1, sizeof(*g));
-    game_start(g, &probe_level, PLAY_SINGLE, 0);
+    game_start(g, &probe_map, PLAY_SINGLE, 0);
     object_t *p = game_player(g);
 
     bool made_it = false;
@@ -275,7 +275,7 @@ static void probe_headroom(int h)
     memset(ground, (uint8_t)h, sizeof(ground));
 
     game_t *g = calloc(1, sizeof(*g));
-    game_start(g, &probe_level, PLAY_SINGLE, 0);
+    game_start(g, &probe_map, PLAY_SINGLE, 0);
     object_t *p = game_player(g);
 
     int air = MAX_Y - h;

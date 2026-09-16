@@ -71,7 +71,7 @@ static void crater(game_t *g, const object_t *ob)
         int x = xmin + i;
         if (x < 0 || x >= MAX_X)
             continue;
-        int floor = g->level->ground[x] - 20;
+        int floor = g->map->ground[x] - 20;
         if (floor < 20)
             floor = 20;
         int ymin = g->ground[x] - depth[i] + 1;

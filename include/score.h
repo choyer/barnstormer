@@ -30,18 +30,18 @@ typedef struct {
     score_entry_t e[SCORE_ROWS];
 } score_table_t;
 
-/* A personal best per level, keyed by level_hash() -- the identity the file
- * format guarantees (doc/LEVEL_FORMAT.md), so two copies of a level share a
- * best and an edited level is a different level.  Authored levels never
+/* A personal best per map, keyed by map_hash() -- the identity the file
+ * format guarantees (doc/MAP_FORMAT.md), so two copies of a map share a
+ * best and an edited map is a different map.  Authored maps never
  * reach the boards, since a board is a comparison between runs on one fixed
  * world; this is the player against themselves on a world of their own.
  *
- * Oldest first: a new level past the end of a full table evicts the least
+ * Oldest first: a new map past the end of a full table evicts the least
  * recently beaten, which is also the order the file is written in. */
 #define SCORE_BESTS 64
 
 typedef struct {
-    uint32_t level;                      /* level_hash()                  */
+    uint32_t map;                        /* map_hash()                    */
     int      score;
 } score_best_t;
 
@@ -73,13 +73,13 @@ int  scores_rank(const scores_t *s, playmode_t mode, int score);
  * -1 if it did not rank after all. */
 int  scores_insert(scores_t *s, playmode_t mode, const char *name, int score);
 
-/* The best score recorded on the level with this hash, or 0 if there is no
+/* The best score recorded on the map with this hash, or 0 if there is no
  * record of it.  A hash of 0 means "no hash to compare" and never matches. */
-int  scores_best(const scores_t *s, uint32_t level);
+int  scores_best(const scores_t *s, uint32_t map);
 
-/* Record `score` against a level if it beats what is there.  True when it
+/* Record `score` against a map if it beats what is there.  True when it
  * did, so the caller can say so on screen. */
-bool scores_best_set(scores_t *s, uint32_t level, int score);
+bool scores_best_set(scores_t *s, uint32_t map, int score);
 
 /* Write the table out.  False means the score could not be saved, which the
  * caller should say on screen rather than treat as fatal. */

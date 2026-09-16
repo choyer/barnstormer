@@ -43,9 +43,9 @@ PROTO_C  := $(patsubst protocol/%.xml,$(BUILD)/protocol/%-protocol.c,$(PROTOS))
 
 SRC := main.c \
        game/game.c game/move.c game/collision.c game/autopilot.c \
-       game/objects.c game/sound.c game/level.c game/net.c game/score.c \
+       game/objects.c game/sound.c game/map.c game/net.c game/score.c \
        game/editor.c game/paths.c \
-       data/sprites.c data/level_classic.c \
+       data/sprites.c data/map_classic.c \
        render/raster.c render/scene.c render/font.c render/sprites_solid.c \
        platform/wl_backend.c \
        audio/audio.c
@@ -92,7 +92,7 @@ $(BUILD)/protocol/%-protocol.c: protocol/%.xml
 regen-data:
 	python3 tools/extract_sprites.py ../origsrc data/sprites.c \
 	        include/sprites_gen.h
-	python3 tools/extract_world.py ../origsrc data/level_classic.c
+	python3 tools/extract_world.py ../origsrc data/map_classic.c
 	python3 tools/make_icon.py ../origsrc barnstormer.svg
 	python3 tools/make_icon.py ../origsrc barnstormer-overlay.svg enemy
 
@@ -125,43 +125,43 @@ clean:
 # ---- headless simulation test ----------------------------------------------
 TEST_SRC := tests/simtest.c \
             game/game.c game/move.c game/collision.c game/autopilot.c \
-            game/objects.c game/sound.c game/level.c game/net.c \
-            game/paths.c data/sprites.c data/level_classic.c
+            game/objects.c game/sound.c game/map.c game/net.c \
+            game/paths.c data/sprites.c data/map_classic.c
 TEST_BIN := $(BUILD)/simtest
 
 SCORE_TEST_SRC := tests/scoretest.c game/score.c game/paths.c
 SCORE_TEST_BIN := $(BUILD)/scoretest
 
-LEVEL_TEST_SRC := tests/leveltest.c game/level.c game/paths.c \
-                  data/level_classic.c
-LEVEL_TEST_BIN := $(BUILD)/leveltest
+MAP_TEST_SRC := tests/maptest.c game/map.c game/paths.c \
+                data/map_classic.c
+MAP_TEST_BIN := $(BUILD)/maptest
 
-EDIT_TEST_SRC := tests/edittest.c game/editor.c game/level.c game/paths.c
+EDIT_TEST_SRC := tests/edittest.c game/editor.c game/map.c game/paths.c
 EDIT_TEST_BIN := $(BUILD)/edittest
 
-# Measures what the flight model can do, for the level-design skill.  Not part
+# Measures what the flight model can do, for the map-design skill.  Not part
 # of `make test`: it prints numbers rather than passing or failing.
 PROBE_SRC := tests/flightprobe.c \
              game/game.c game/move.c game/collision.c game/autopilot.c \
-             game/objects.c game/sound.c game/level.c game/net.c \
+             game/objects.c game/sound.c game/map.c game/net.c \
              game/paths.c data/sprites.c
 PROBE_BIN := $(BUILD)/flightprobe
 
-# Flies a level file and says whether it can be flown out of, for the level
+# Flies a map file and says whether it can be flown out of, for the map
 # generator to check its own work.
 FLYTEST_SRC := tests/flytest.c \
                game/game.c game/move.c game/collision.c game/autopilot.c \
-               game/objects.c game/sound.c game/level.c game/net.c \
+               game/objects.c game/sound.c game/map.c game/net.c \
                game/paths.c data/sprites.c
 FLYTEST_BIN := $(BUILD)/flytest
 
 .PHONY: test
-test: $(TEST_BIN) $(SCORE_TEST_BIN) $(LEVEL_TEST_BIN) $(EDIT_TEST_BIN)
+test: $(TEST_BIN) $(SCORE_TEST_BIN) $(MAP_TEST_BIN) $(EDIT_TEST_BIN)
 	$(TEST_BIN)
 	@echo
 	$(SCORE_TEST_BIN)
 	@echo
-	$(LEVEL_TEST_BIN)
+	$(MAP_TEST_BIN)
 	@echo
 	$(EDIT_TEST_BIN)
 
@@ -182,10 +182,10 @@ $(SCORE_TEST_BIN): $(SCORE_TEST_SRC)
 	$(CC) -std=c11 $(WARN) -Iinclude -O1 -g -fsanitize=address,undefined \
 	    -o $@ $(SCORE_TEST_SRC)
 
-$(LEVEL_TEST_BIN): $(LEVEL_TEST_SRC)
+$(MAP_TEST_BIN): $(MAP_TEST_SRC)
 	@mkdir -p $(dir $@)
 	$(CC) -std=c11 $(WARN) -Iinclude -O1 -g -fsanitize=address,undefined \
-	    -o $@ $(LEVEL_TEST_SRC)
+	    -o $@ $(MAP_TEST_SRC)
 
 $(PROBE_BIN): $(PROBE_SRC)
 	@mkdir -p $(dir $@)

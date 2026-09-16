@@ -190,7 +190,7 @@ void sw_aim(game_t *g, object_t *ob, int ax, int ay, object_t *targ,
         int gx = nx + 8;
         if (gx < 0) gx = 0;
         if (gx >= MAX_X) gx = MAX_X - 1;
-        calt[i] = ny - g->level->ground[gx];
+        calt[i] = ny - g->map->ground[gx];
         ccrash[i] = would_crash(g, ob, nx, ny, calt[i]);
         sim = *ob;
     }
@@ -252,7 +252,7 @@ void sw_go_home(game_t *g, object_t *ob)
 
     if (sw_abs(ob->x - base->x) < AI_HOME &&
         sw_abs(ob->y - base->y) < AI_HOME) {
-        int slot = level_runway_slot(g->mode, ob->index);
+        int slot = map_runway_slot(g->mode, ob->index);
         if (ob->ai)
             sw_init_comp(g, ob, slot);
         else

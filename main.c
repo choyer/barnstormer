@@ -26,7 +26,7 @@ extern const int sw_title_menu_len;
 #endif
 
 typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER, UI_ENTRY,
-               UI_EDIT, UI_LEVELS, UI_ATTRACT } uistate_t;
+               UI_EDIT, UI_MAPS, UI_ATTRACT } uistate_t;
 
 /* Left alone on the title screen, the game starts showing off: after
  * TITLE_IDLE_SECS with nothing typed it cycles the three high score boards,
@@ -142,11 +142,11 @@ static void usage(const char *argv0)
 "  -c, --computer        against three computer pilots (the default)\n"
 "  -g, --game N          start at difficulty N (0-%d)\n"
 "  -q, --quiet           start with the sound off\n"
-"  -l, --level FILE      fly a level file instead of the classic map\n"
-"                        (doc/LEVEL_FORMAT.md); runs on it are not ranked\n"
-"  -e, --edit FILE       open FILE in the level editor, creating it if it\n"
+"  -m, --map FILE        fly a map file instead of the classic map\n"
+"                        (doc/MAP_FORMAT.md); runs on it are not ranked\n"
+"  -e, --edit FILE       open FILE in the map editor, creating it if it\n"
 "                        is not there yet\n"
-"      --check FILE      say whether FILE is a level and exit, without\n"
+"      --check FILE      say whether FILE is a map and exit, without\n"
 "                        opening a window\n"
 "\n"
 "Controls:\n"
@@ -178,7 +178,7 @@ int main(int argc, char **argv)
     bool sound = true, grab = true, skip_title = false;
     bool smooth = true;
     const char *dump_path = NULL;
-    const char *level_path = NULL;
+    const char *map_path = NULL;
     const char *edit_path = NULL;
     const char *check_path = NULL;
     long dump_after = 0;
@@ -211,9 +211,9 @@ int main(int argc, char **argv)
             gamenum = atoi(argv[++i]);
             if (gamenum < 0) gamenum = 0;
             if (gamenum > MAX_GAME) gamenum = MAX_GAME;
-        } else if ((!strcmp(a, "-l") || !strcmp(a, "--level")) &&
+        } else if ((!strcmp(a, "-m") || !strcmp(a, "--map")) &&
                    i + 1 < argc) {
-            level_path = argv[++i];
+            map_path = argv[++i];
         } else if ((!strcmp(a, "-e") || !strcmp(a, "--edit")) &&
                    i + 1 < argc) {
             edit_path = argv[++i];
@@ -236,44 +236,44 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Before the window: a level that will not load should say so on the
+    /* Before the window: a map that will not load should say so on the
      * terminal the player typed into, not flash a window and vanish. */
-    const level_t *level = &level_classic;
-    level_t *custom = NULL;
-    if (level_path) {
-        if (level_load(level_path, &custom) < 0) {
+    const map_t *map = &map_classic;
+    map_t *custom = NULL;
+    if (map_path) {
+        if (map_load(map_path, &custom) < 0) {
             fprintf(stderr, "barnstormer: %s: %s\n",
-                    level_path, level_error());
+                    map_path, map_error());
             return 1;
         }
-        level = custom;
-        printf("flying \"%s\"%s%s [%08x]\n", level->name,
-               level->author ? " by " : "",
-               level->author ? level->author : "",
-               level_hash(level));
+        map = custom;
+        printf("flying \"%s\"%s%s [%08x]\n", map->name,
+               map->author ? " by " : "",
+               map->author ? map->author : "",
+               map_hash(map));
     }
 
     /* Answered before anything opens a window, so that it works over ssh, in
-     * a container, and in whatever a level generator is being driven from. */
+     * a container, and in whatever a map generator is being driven from. */
     if (check_path) {
-        level_t *lv = NULL;
-        if (level_load(check_path, &lv) < 0) {
-            fprintf(stderr, "%s: %s\n", check_path, level_error());
+        map_t *lv = NULL;
+        if (map_load(check_path, &lv) < 0) {
+            fprintf(stderr, "%s: %s\n", check_path, map_error());
             return 1;
         }
-        int lo = LEVEL_GROUND_MAX, hi = 0;
+        int lo = MAP_GROUND_MAX, hi = 0;
         for (int i = 0; i < lv->width; i++) {
             if (lv->ground[i] < lo) lo = lv->ground[i];
             if (lv->ground[i] > hi) hi = lv->ground[i];
         }
-        printf("%s: ok [%08x]  \"%s\"%s%s\n", check_path, level_hash(lv),
+        printf("%s: ok [%08x]  \"%s\"%s%s\n", check_path, map_hash(lv),
                lv->name, lv->author ? " by " : "",
                lv->author ? lv->author : "");
         printf("  terrain %d..%d   %d runway%s  %d building%s  %d ox%s\n",
                lo, hi, lv->n_runways, lv->n_runways == 1 ? "" : "s",
                lv->n_targets, lv->n_targets == 1 ? "" : "s",
                lv->n_oxen, lv->n_oxen == 1 ? "" : "en");
-        level_free(lv);
+        map_free(lv);
         return 0;
     }
 
@@ -284,10 +284,10 @@ int main(int argc, char **argv)
     if (edit_path) {
         if (editor_open(&editor, edit_path) < 0) {
             fprintf(stderr, "barnstormer: %s: %s\n", edit_path,
-                    level_error());
+                    map_error());
             return 1;
         }
-        level = editor_level(&editor);
+        map = editor_map(&editor);
     }
 
     sprites_build_solid();
@@ -313,18 +313,18 @@ int main(int argc, char **argv)
     game_t game;
     memset(&game, 0, sizeof(game));
     game.sound_on = sound;
-    game_start(&game, level, mode, gamenum);
+    game_start(&game, map, mode, gamenum);
 
     uistate_t ui = edit_path ? UI_EDIT : (skip_title ? UI_PLAY : UI_TITLE);
     bool flying = false;          /* test flight launched from the editor */
     bool leave_armed = false;     /* Esc pressed once with work unsaved   */
     unsigned edit_t = 0;          /* paces the held-key editing keys      */
 
-    /* The level directory, read when the picker is opened rather than at
-     * startup: levels arrive while the game is running, from the editor a
+    /* The map directory, read when the picker is opened rather than at
+     * startup: maps arrive while the game is running, from the editor a
      * Tab away or from a file manager. */
-    level_info_t levels[LEVEL_LIST_MAX];
-    int n_levels = 0, levels_skipped = 0, level_sel = 0;
+    map_info_t maps[MAP_LIST_MAX];
+    int n_maps = 0, maps_skipped = 0, map_sel = 0;
     int menu_sel = (mode == PLAY_NOVICE) ? 0 : (mode == PLAY_SINGLE ? 1 : 2);
     unsigned title_t = 0;
 
@@ -363,7 +363,7 @@ int main(int argc, char **argv)
     int  final_score = 0;
     bool saved = true;
     bool ranked_run = false;    /* the finished run reached a board        */
-    int  level_best = 0;        /* best ever flown on the level just flown */
+    int  map_best = 0;          /* best ever flown on the map just flown   */
     unsigned over_t = 0;
 
     while (running && platform_poll(plat)) {
@@ -446,7 +446,7 @@ int main(int argc, char **argv)
                 }
 
                 if (ev == SWKEY_TAB) {
-                    game_start(&game, editor_level(&editor), mode, gamenum);
+                    game_start(&game, editor_map(&editor), mode, gamenum);
                     run_marked = false;
                     flying = true;
                     ui = UI_PLAY;
@@ -488,34 +488,33 @@ int main(int argc, char **argv)
                 continue;
             }
 
-            if (ui == UI_LEVELS) {
+            if (ui == UI_MAPS) {
                 if (ev == SWKEY_UP) {
-                    level_sel = (level_sel + n_levels) % (n_levels + 1);
+                    map_sel = (map_sel + n_maps) % (n_maps + 1);
                 } else if (ev == SWKEY_DOWN) {
-                    level_sel = (level_sel + 1) % (n_levels + 1);
+                    map_sel = (map_sel + 1) % (n_maps + 1);
                 } else if (ev == SWKEY_QUIT) {
                     ui = UI_TITLE;
                 } else if (ev == SWKEY_ENTER) {
-                    if (level_sel == 0) {
-                        level_free(custom);
+                    if (map_sel == 0) {
+                        map_free(custom);
                         custom = NULL;
-                        level = &level_classic;
+                        map = &map_classic;
                         ui = UI_TITLE;
                     } else {
-                        level_t *picked = NULL;
-                        if (level_load(levels[level_sel - 1].path,
-                                       &picked) == 0) {
-                            level_free(custom);
+                        map_t *picked = NULL;
+                        if (map_load(maps[map_sel - 1].path, &picked) == 0) {
+                            map_free(custom);
                             custom = picked;
-                            level = custom;
+                            map = custom;
                             ui = UI_TITLE;
                         } else {
                             /* It listed a moment ago, so something has
                              * happened to it since.  Show the list again. */
-                            n_levels = level_list(levels, LEVEL_LIST_MAX,
-                                                  &levels_skipped);
-                            if (level_sel > n_levels)
-                                level_sel = n_levels;
+                            n_maps = map_list(maps, MAP_LIST_MAX,
+                                              &maps_skipped);
+                            if (map_sel > n_maps)
+                                map_sel = n_maps;
                         }
                     }
                 }
@@ -569,7 +568,7 @@ int main(int argc, char **argv)
                 break;
 
             case SWKEY_QUIT:
-                /* A test flight is not a run: Esc puts the level back on the
+                /* A test flight is not a run: Esc puts the map back on the
                  * bench rather than walking out through the score screen. */
                 if (flying && (ui == UI_PLAY || ui == UI_PAUSED)) {
                     flying = false;
@@ -623,17 +622,17 @@ int main(int argc, char **argv)
 
             case SWKEY_ENTER:
                 if (ui == UI_TITLE && menu_sel == 3) {
-                    n_levels = level_list(levels, LEVEL_LIST_MAX,
-                                          &levels_skipped);
-                    level_sel = 0;
-                    for (int i = 0; i < n_levels; i++)
-                        if (custom && !strcmp(levels[i].name, custom->name))
-                            level_sel = i + 1;
-                    ui = UI_LEVELS;
+                    n_maps = map_list(maps, MAP_LIST_MAX,
+                                      &maps_skipped);
+                    map_sel = 0;
+                    for (int i = 0; i < n_maps; i++)
+                        if (custom && !strcmp(maps[i].name, custom->name))
+                            map_sel = i + 1;
+                    ui = UI_MAPS;
                 } else if (ui == UI_TITLE) {
                     mode = (menu_sel == 0) ? PLAY_NOVICE
                          : (menu_sel == 1) ? PLAY_SINGLE : PLAY_COMPUTER;
-                    game_start(&game, level, mode, gamenum);
+                    game_start(&game, map, mode, gamenum);
                     /* The window shuts behind the run it applies to: the
                      * allowance belongs to this game, not to the next. */
                     run_marked = key_armed;
@@ -648,7 +647,7 @@ int main(int argc, char **argv)
                     key_armed = false;
                     ui = UI_PLAY;
                 } else if (ui == UI_OVER) {
-                    game_start(&game, level, mode, gamenum);
+                    game_start(&game, map, mode, gamenum);
                     run_marked = false;
                     ui = UI_PLAY;
                 }
@@ -656,7 +655,7 @@ int main(int argc, char **argv)
 
             case SWKEY_RESTART:
                 if (ui == UI_PLAY) {
-                    game_start(&game, level, mode, gamenum);
+                    game_start(&game, map, mode, gamenum);
                     run_marked = false;
                 }
                 break;
@@ -760,23 +759,23 @@ int main(int argc, char **argv)
             final_score = game_player(&game)->score;
 
             /* A run on the larger allowance is not a run the boards can be
-             * compared against, any more than a run on somebody's own level
+             * compared against, any more than a run on somebody's own map
              * is: it is shown and not ranked. */
             ranked_run = game_ranked(&game) && !run_marked;
             rank = ranked_run ? scores_rank(&scores, mode, final_score) : -1;
             board = scores.board[b];
             over_t = 0;
 
-            /* What a level is worth to the player who flew it, whether or
-             * not any board will take it.  Keyed by the level's own hash, so
-             * two copies of a level share a best and an edited one does not
+            /* What a map is worth to the player who flew it, whether or
+             * not any board will take it.  Keyed by the map's own hash, so
+             * two copies of a map share a best and an edited one does not
              * inherit it. */
-            level_best = 0;
+            map_best = 0;
             if (game_completed(&game) && !run_marked) {
-                uint32_t id = level_hash(level);
+                uint32_t id = map_hash(map);
                 if (scores_best_set(&scores, id, final_score))
                     scores_save(&scores);
-                level_best = scores_best(&scores, id);
+                map_best = scores_best(&scores, id);
             }
 
             if (rank >= 0) {
@@ -854,24 +853,24 @@ int main(int argc, char **argv)
                 render_scores(fb, &ctx, &v);
                 break;
             }
-            case UI_LEVELS: {
+            case UI_MAPS: {
                 char dir[512];
-                /* One personal best per level, looked up by the hash
-                 * level_list() recorded while it had the level open. */
-                int bests[LEVEL_LIST_MAX];
-                for (int i = 0; i < n_levels; i++)
-                    bests[i] = scores_best(&scores, levels[i].hash);
-                levelpick_t v = {
-                    .items   = levels,
-                    .n       = n_levels,
-                    .sel     = level_sel,
-                    .skipped = levels_skipped,
-                    .dir     = level_dir(dir, sizeof(dir)) ? dir : NULL,
+                /* One personal best per map, looked up by the hash
+                 * map_list() recorded while it had the map open. */
+                int bests[MAP_LIST_MAX];
+                for (int i = 0; i < n_maps; i++)
+                    bests[i] = scores_best(&scores, maps[i].hash);
+                mappick_t v = {
+                    .items   = maps,
+                    .n       = n_maps,
+                    .sel     = map_sel,
+                    .skipped = maps_skipped,
+                    .dir     = map_dir(dir, sizeof(dir)) ? dir : NULL,
                     .best    = bests,
                     .best_classic = scores_best(&scores,
-                                                level_hash(&level_classic)),
+                                                map_hash(&map_classic)),
                 };
-                render_levels(fb, &ctx, &v);
+                render_maps(fb, &ctx, &v);
                 break;
             }
             case UI_PLAY:
@@ -896,12 +895,12 @@ int main(int argc, char **argv)
             }
             case UI_EDIT: {
                 editview_t v = {
-                    .level     = editor_level(&editor),
+                    .map       = editor_map(&editor),
                     .cursor    = editor.cursor,
                     .brush     = editor.brush,
                     .footprint = editor.tool == ED_TERRAIN ? 0
-                               : editor.tool == ED_RUNWAY ? LEVEL_RUNWAY_SPAN
-                                                          : LEVEL_TARGET_WIDTH,
+                               : editor.tool == ED_RUNWAY ? MAP_RUNWAY_SPAN
+                                                          : MAP_TARGET_WIDTH,
                     .tool      = editor_tool_name(&editor),
                     .variant   = editor_variant_name(&editor),
                     .status    = editor_status(&editor),
@@ -923,7 +922,7 @@ int main(int argc, char **argv)
                     .board_name  = score_board_name(mode),
                     .final_score = final_score,
                     .ranked      = ranked_run,
-                    .level_best  = level_best,
+                    .map_best    = map_best,
                     .table       = &board,
                     .highlight   = rank,
                     .edit_cell   = ui == UI_ENTRY ? cell : -1,
@@ -951,6 +950,6 @@ int main(int argc, char **argv)
 
     audio_close(audio);
     platform_close(plat);
-    level_free(custom);
+    map_free(custom);
     return 0;
 }

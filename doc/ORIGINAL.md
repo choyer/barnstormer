@@ -15,9 +15,9 @@ file is the statement of what changed; all changes date from 2026-09.
 
 | What | Where it came from | Where it lives now |
 |---|---|---|
-| Terrain height field (3000 columns) | `SWGROUND.C` | `data/level_classic.c` |
-| Runway and building layout | `SWGAMES.C` | `data/level_classic.c` |
-| Ox and bird-flock spawns | `SWINIT.C` | `data/level_classic.c` |
+| Terrain height field (3000 columns) | `SWGROUND.C` | `data/map_classic.c` |
+| Runway and building layout | `SWGAMES.C` | `data/map_classic.c` |
+| Ox and bird-flock spawns | `SWINIT.C` | `data/map_classic.c` |
 | All sprite artwork | `SWPLANES.C`, `SWSYMBOL.C` | `data/sprites.c` |
 | Flight model, stall and fall behaviour | `SWMOVE.C` | `game/move.c` |
 | Fixed-point motion (16.16, carry into pixels) | `SWUTIL.ASM` | `game/objects.c` |

@@ -153,10 +153,10 @@ int main(void)
     ok("and an unmarked entry does not acquire one",
        !marks.board[2].e[1].marked && !marks.board[0].e[0].marked);
 
-    /* ---- one best per level, keyed by the level's hash ---- */
+    /* ---- one best per map, keyed by the map's hash ---- */
     scores_load(&s);
-    ok("a level nobody has flown has no best", scores_best(&s, 0xabcd1234u) == 0);
-    ok("the first score on a level is recorded",
+    ok("a map nobody has flown has no best", scores_best(&s, 0xabcd1234u) == 0);
+    ok("the first score on a map is recorded",
        scores_best_set(&s, 0xabcd1234u, 4000));
     ok("and is what is reported back", scores_best(&s, 0xabcd1234u) == 4000);
     ok("a worse run does not replace it",
@@ -166,11 +166,11 @@ int main(void)
        !scores_best_set(&s, 0xabcd1234u, 4000));
     ok("a better run does", scores_best_set(&s, 0xabcd1234u, 4001) &&
        scores_best(&s, 0xabcd1234u) == 4001);
-    ok("levels are independent",
+    ok("maps are independent",
        scores_best_set(&s, 0x11112222u, 10) &&
        scores_best(&s, 0xabcd1234u) == 4001 &&
        scores_best(&s, 0x11112222u) == 10);
-    ok("a level with no hash is never recorded",
+    ok("a map with no hash is never recorded",
        !scores_best_set(&s, 0, 5000) && scores_best(&s, 0) == 0);
     ok("nor is a score of nothing", !scores_best_set(&s, 0x33334444u, 0));
 
@@ -186,7 +186,7 @@ int main(void)
     for (uint32_t h = 1; h <= SCORE_BESTS + 4; h++)
         scores_best_set(&bests, 0x50000000u + h, (int)h * 10);
     ok("the table holds its size", bests.n_best == SCORE_BESTS);
-    ok("the newest levels are kept",
+    ok("the newest maps are kept",
        scores_best(&bests, 0x50000000u + SCORE_BESTS + 4) ==
        (int)(SCORE_BESTS + 4) * 10);
     ok("and the oldest were evicted",

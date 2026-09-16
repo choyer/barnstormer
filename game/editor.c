@@ -1,8 +1,8 @@
 /*
- * editor.c -- the level editor's model.
+ * editor.c -- the map editor's model.
  *
- * Every change goes through the same shape: make it, ask level_check()
- * whether the result is still a level, and undo it if it is not.  The check
+ * Every change goes through the same shape: make it, ask map_check()
+ * whether the result is still a map, and undo it if it is not.  The check
  * is the loader's own, so the editor cannot author anything the loader would
  * refuse -- which is what makes "fly it now" safe to offer at any moment, and
  * what keeps the rules in one place rather than two that drift apart.
@@ -46,13 +46,13 @@ static void status(editor_t *ed, const char *fmt, ...)
     va_end(ap);
 }
 
-/* Point the level_t at the arrays it describes.  Called after anything that
+/* Point the map_t at the arrays it describes.  Called after anything that
  * changes a count, and after an undo, so the view is never stale. */
 static void sync(editor_t *ed)
 {
     ed->view.name      = ed->name;
     ed->view.author    = ed->author[0] ? ed->author : NULL;
-    ed->view.format    = LEVEL_FORMAT_VERSION;
+    ed->view.format    = MAP_FORMAT_VERSION;
     ed->view.width     = MAX_X;
     ed->view.height    = MAX_Y;
     ed->view.rand_seed = ed->seed;
@@ -65,18 +65,18 @@ static void sync(editor_t *ed)
     ed->view.n_oxen    = ed->n_oxen;
 }
 
-/* Keep the change if the result is still a level, put it back if it is not.
+/* Keep the change if the result is still a map, put it back if it is not.
  * `what` names the thing that was attempted, for the status line. */
 static int keep(editor_t *ed, const editor_t *before, const char *what)
 {
     sync(ed);
-    if (level_check(&ed->view) == 0) {
+    if (map_check(&ed->view) == 0) {
         ed->dirty = true;
         return 0;
     }
 
     char why[EDITOR_STATUS_MAX];
-    snprintf(why, sizeof(why), "%s", level_error());
+    snprintf(why, sizeof(why), "%s", map_error());
     *ed = *before;
     sync(ed);
     status(ed, "%s: %s", what, why);
@@ -95,7 +95,7 @@ static int centred(const editor_t *ed, int width)
     return clampi(ed->cursor - width / 2, 0, MAX_X - width);
 }
 
-/* "levels/salt-flats.lvl" -> "Salt Flats".  A level always has a name, and
+/* "maps/salt-flats.map" -> "Salt Flats".  A map always has a name, and
  * the file it is being written to is a better guess than "Untitled". */
 static void name_from_path(char *dst, size_t n, const char *path)
 {
@@ -104,10 +104,10 @@ static void name_from_path(char *dst, size_t n, const char *path)
 
     /* Copied rather than snprintf'd: the path may be longer than a name is
      * allowed to be, and that is a trim, not a mistake worth a warning. */
-    char tmp[LEVEL_NAME_MAX + 1];
+    char tmp[MAP_NAME_MAX + 1];
     size_t len = strlen(base);
-    if (len > LEVEL_NAME_MAX)
-        len = LEVEL_NAME_MAX;
+    if (len > MAP_NAME_MAX)
+        len = MAP_NAME_MAX;
     memcpy(tmp, base, len);
     tmp[len] = '\0';
 
@@ -142,23 +142,23 @@ void editor_new(editor_t *ed, const char *path)
 
     memset(ed->ground, NEW_GROUND_HEIGHT, sizeof(ed->ground));
 
-    /* The two a level cannot do without: one home field each, far enough
+    /* The two a map cannot do without: one home field each, far enough
      * apart to fly between. */
-    ed->runways[0] = (level_runway_t){ .x = 400,  .orient = 0 };
-    ed->runways[1] = (level_runway_t){ .x = 2400, .orient = 1 };
+    ed->runways[0] = (map_runway_t){ .x = 400,  .orient = 0 };
+    ed->runways[1] = (map_runway_t){ .x = 2400, .orient = 1 };
     ed->n_runways = 2;
 
     ed->cursor = MAX_X / 2;
     ed->brush = 12;
     ed->tool = ED_TERRAIN;
     sync(ed);
-    status(ed, "new level");
+    status(ed, "new map");
 }
 
 int editor_open(editor_t *ed, const char *path)
 {
-    level_t *lv = NULL;
-    if (level_load(path, &lv) < 0) {
+    map_t *lv = NULL;
+    if (map_load(path, &lv) < 0) {
         if (errno == ENOENT) {
             editor_new(ed, path);
             return 0;
@@ -175,14 +175,14 @@ int editor_open(editor_t *ed, const char *path)
     memcpy(ed->ground, lv->ground, MAX_X);
     ed->n_runways = lv->n_runways;
     memcpy(ed->runways, lv->runways,
-           sizeof(level_runway_t) * (size_t)lv->n_runways);
+           sizeof(map_runway_t) * (size_t)lv->n_runways);
     ed->n_targets = lv->n_targets;
     memcpy(ed->targets, lv->targets,
-           sizeof(level_target_t) * (size_t)lv->n_targets);
+           sizeof(map_target_t) * (size_t)lv->n_targets);
     ed->n_oxen = lv->n_oxen;
-    memcpy(ed->oxen, lv->oxen, sizeof(level_point_t) * (size_t)lv->n_oxen);
+    memcpy(ed->oxen, lv->oxen, sizeof(map_point_t) * (size_t)lv->n_oxen);
 
-    level_free(lv);
+    map_free(lv);
     sync(ed);
     ed->dirty = false;
     status(ed, "opened %s", ed->name);
@@ -192,20 +192,20 @@ int editor_open(editor_t *ed, const char *path)
 int editor_save(editor_t *ed)
 {
     sync(ed);
-    /* Saving into the level directory should not require having made it. */
+    /* Saving into the map directory should not require having made it. */
     sw_make_parent(ed->path);
-    if (level_save(ed->path, &ed->view) < 0) {
-        status(ed, "not saved: %s", level_error());
+    if (map_save(ed->path, &ed->view) < 0) {
+        status(ed, "not saved: %s", map_error());
         return -1;
     }
     ed->dirty = false;
     /* With the hash, so that somebody sending the file and somebody receiving
      * it have something short to compare. */
-    status(ed, "saved [%08x] to %s", level_hash(&ed->view), ed->path);
+    status(ed, "saved [%08x] to %s", map_hash(&ed->view), ed->path);
     return 0;
 }
 
-const level_t *editor_level(const editor_t *ed)
+const map_t *editor_map(const editor_t *ed)
 {
     return &ed->view;
 }
@@ -221,14 +221,14 @@ static int carry_follow(editor_t *ed)
     switch (ed->carry) {
     case ED_CARRY_TARGET:
         ed->targets[ed->carry_i].x =
-            (uint16_t)centred(ed, LEVEL_TARGET_WIDTH);
+            (uint16_t)centred(ed, MAP_TARGET_WIDTH);
         break;
     case ED_CARRY_RUNWAY:
         ed->runways[ed->carry_i].x =
-            (uint16_t)centred(ed, LEVEL_RUNWAY_SPAN);
+            (uint16_t)centred(ed, MAP_RUNWAY_SPAN);
         break;
     case ED_CARRY_OX: {
-        int x = centred(ed, LEVEL_TARGET_WIDTH);
+        int x = centred(ed, MAP_TARGET_WIDTH);
         ed->oxen[ed->carry_i].x = (uint16_t)x;
         /* An ox walks on the ground rather than through it. */
         ed->oxen[ed->carry_i].y =
@@ -317,7 +317,7 @@ int editor_raise(editor_t *ed, int delta)
 
     for (int x = lo; x <= hi; x++)
         ed->ground[x] = (uint8_t)clampi(ed->ground[x] + delta,
-                                        LEVEL_GROUND_MIN, LEVEL_GROUND_MAX);
+                                        MAP_GROUND_MIN, MAP_GROUND_MAX);
 
     if (keep(ed, &before, delta >= 0 ? "cannot raise" : "cannot lower") < 0)
         return -1;
@@ -340,7 +340,7 @@ int editor_smooth(editor_t *ed)
         int l = x > 0 ? ed->ground[x - 1] : ed->ground[x];
         int r = x < MAX_X - 1 ? ed->ground[x + 1] : ed->ground[x];
         out[x] = (uint8_t)clampi((l + ed->ground[x] + r + 1) / 3,
-                                 LEVEL_GROUND_MIN, LEVEL_GROUND_MAX);
+                                 MAP_GROUND_MIN, MAP_GROUND_MAX);
     }
     memcpy(ed->ground, out, sizeof(out));
 
@@ -378,11 +378,11 @@ int editor_place(editor_t *ed)
 
     case ED_TARGET:
         if (ed->n_targets >= MAX_TARG) {
-            status(ed, "cannot place: a level holds %d buildings", MAX_TARG);
+            status(ed, "cannot place: a map holds %d buildings", MAX_TARG);
             return -1;
         }
-        ed->targets[ed->n_targets++] = (level_target_t){
-            .x = (uint16_t)centred(ed, LEVEL_TARGET_WIDTH),
+        ed->targets[ed->n_targets++] = (map_target_t){
+            .x = (uint16_t)centred(ed, MAP_TARGET_WIDTH),
             .kind = (uint8_t)(ed->variant & 3),
         };
         if (keep(ed, &before, "cannot place") < 0)
@@ -392,13 +392,13 @@ int editor_place(editor_t *ed)
         return 0;
 
     case ED_RUNWAY:
-        if (ed->n_runways >= LEVEL_MAX_RUNWAYS) {
-            status(ed, "cannot place: a level holds %d runways",
-                   LEVEL_MAX_RUNWAYS);
+        if (ed->n_runways >= MAP_MAX_RUNWAYS) {
+            status(ed, "cannot place: a map holds %d runways",
+                   MAP_MAX_RUNWAYS);
             return -1;
         }
-        ed->runways[ed->n_runways++] = (level_runway_t){
-            .x = (uint16_t)centred(ed, LEVEL_RUNWAY_SPAN),
+        ed->runways[ed->n_runways++] = (map_runway_t){
+            .x = (uint16_t)centred(ed, MAP_RUNWAY_SPAN),
             .orient = (uint8_t)(ed->variant & 1),
         };
         if (keep(ed, &before, "cannot place") < 0)
@@ -409,12 +409,12 @@ int editor_place(editor_t *ed)
 
     case ED_OX: {
         if (ed->n_oxen >= MAX_OXEN) {
-            status(ed, "cannot place: a level holds %d oxen", MAX_OXEN);
+            status(ed, "cannot place: a map holds %d oxen", MAX_OXEN);
             return -1;
         }
-        int x = centred(ed, LEVEL_TARGET_WIDTH);
+        int x = centred(ed, MAP_TARGET_WIDTH);
         /* An ox stands on the ground, the same 16 above it a building does. */
-        ed->oxen[ed->n_oxen++] = (level_point_t){
+        ed->oxen[ed->n_oxen++] = (map_point_t){
             .x = (uint16_t)x,
             .y = (uint16_t)clampi(ed->ground[x] + 16, 0, MAX_Y - 1),
         };
@@ -437,10 +437,10 @@ int editor_erase(editor_t *ed)
     int c = ed->cursor;
 
     for (int i = 0; i < ed->n_oxen; i++) {
-        if (c < ed->oxen[i].x || c >= ed->oxen[i].x + LEVEL_TARGET_WIDTH)
+        if (c < ed->oxen[i].x || c >= ed->oxen[i].x + MAP_TARGET_WIDTH)
             continue;
         memmove(&ed->oxen[i], &ed->oxen[i + 1],
-                sizeof(level_point_t) * (size_t)(ed->n_oxen - i - 1));
+                sizeof(map_point_t) * (size_t)(ed->n_oxen - i - 1));
         ed->n_oxen--;
         if (keep(ed, &before, "cannot remove") < 0)
             return -1;
@@ -449,12 +449,12 @@ int editor_erase(editor_t *ed)
     }
 
     for (int i = 0; i < ed->n_targets; i++) {
-        if (c < ed->targets[i].x || c >= ed->targets[i].x + LEVEL_TARGET_WIDTH)
+        if (c < ed->targets[i].x || c >= ed->targets[i].x + MAP_TARGET_WIDTH)
             continue;
         /* Shifted rather than swapped: which slot a building sits in decides
          * whose side it is on (game.c), so the order has to hold. */
         memmove(&ed->targets[i], &ed->targets[i + 1],
-                sizeof(level_target_t) * (size_t)(ed->n_targets - i - 1));
+                sizeof(map_target_t) * (size_t)(ed->n_targets - i - 1));
         ed->n_targets--;
         if (keep(ed, &before, "cannot remove") < 0)
             return -1;
@@ -463,10 +463,10 @@ int editor_erase(editor_t *ed)
     }
 
     for (int i = 0; i < ed->n_runways; i++) {
-        if (c < ed->runways[i].x || c >= ed->runways[i].x + LEVEL_RUNWAY_SPAN)
+        if (c < ed->runways[i].x || c >= ed->runways[i].x + MAP_RUNWAY_SPAN)
             continue;
         memmove(&ed->runways[i], &ed->runways[i + 1],
-                sizeof(level_runway_t) * (size_t)(ed->n_runways - i - 1));
+                sizeof(map_runway_t) * (size_t)(ed->n_runways - i - 1));
         ed->n_runways--;
         if (keep(ed, &before, "cannot remove") < 0)
             return -1;
@@ -490,7 +490,7 @@ int editor_grab(editor_t *ed)
     /* The same order erasing uses: the small things before the strip they may
      * be standing next to. */
     for (int i = 0; i < ed->n_oxen; i++)
-        if (c >= ed->oxen[i].x && c < ed->oxen[i].x + LEVEL_TARGET_WIDTH) {
+        if (c >= ed->oxen[i].x && c < ed->oxen[i].x + MAP_TARGET_WIDTH) {
             ed->carry = ED_CARRY_OX;
             ed->carry_i = i;
             ed->carry_home = ed->oxen[i];
@@ -500,10 +500,10 @@ int editor_grab(editor_t *ed)
 
     for (int i = 0; i < ed->n_targets; i++)
         if (c >= ed->targets[i].x &&
-            c < ed->targets[i].x + LEVEL_TARGET_WIDTH) {
+            c < ed->targets[i].x + MAP_TARGET_WIDTH) {
             ed->carry = ED_CARRY_TARGET;
             ed->carry_i = i;
-            ed->carry_home = (level_point_t){ ed->targets[i].x, 0 };
+            ed->carry_home = (map_point_t){ ed->targets[i].x, 0 };
             status(ed, "carrying a %s -- g drops it, Esc puts it back",
                    kind_name[ed->targets[i].kind & 3]);
             return 0;
@@ -511,10 +511,10 @@ int editor_grab(editor_t *ed)
 
     for (int i = 0; i < ed->n_runways; i++)
         if (c >= ed->runways[i].x &&
-            c < ed->runways[i].x + LEVEL_RUNWAY_SPAN) {
+            c < ed->runways[i].x + MAP_RUNWAY_SPAN) {
             ed->carry = ED_CARRY_RUNWAY;
             ed->carry_i = i;
-            ed->carry_home = (level_point_t){ ed->runways[i].x, 0 };
+            ed->carry_home = (map_point_t){ ed->runways[i].x, 0 };
             status(ed, "carrying runway %d -- g drops it, Esc puts it back",
                    i + 1);
             return 0;
@@ -562,15 +562,15 @@ void editor_carry_span(const editor_t *ed, int *x, int *w)
     switch (ed->carry) {
     case ED_CARRY_TARGET:
         *x = ed->targets[ed->carry_i].x;
-        *w = LEVEL_TARGET_WIDTH;
+        *w = MAP_TARGET_WIDTH;
         return;
     case ED_CARRY_RUNWAY:
         *x = ed->runways[ed->carry_i].x;
-        *w = LEVEL_RUNWAY_SPAN;
+        *w = MAP_RUNWAY_SPAN;
         return;
     case ED_CARRY_OX:
         *x = ed->oxen[ed->carry_i].x;
-        *w = LEVEL_TARGET_WIDTH;
+        *w = MAP_TARGET_WIDTH;
         return;
     default:
         *x = 0;
@@ -597,7 +597,7 @@ void editor_type_char(editor_t *ed, char c)
     if (!ed->typing || c < 0x20 || c >= 0x7f)
         return;
     size_t n = strlen(ed->typebuf);
-    if (n >= LEVEL_NAME_MAX) {
+    if (n >= MAP_NAME_MAX) {
         status(ed, "that is as long as a %s can be",
                editor_field_name(ed->typing));
         return;

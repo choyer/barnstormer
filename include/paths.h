@@ -1,7 +1,7 @@
 /*
  * paths.h -- where the game keeps things.
  *
- * One place for the XDG rules, so the score file and the level directory
+ * One place for the XDG rules, so the score file and the map directory
  * cannot disagree about where "the game's data" is.
  */
 #ifndef PATHS_H
@@ -14,7 +14,7 @@
  * than to fail: nothing here is worth refusing to play over. */
 bool sw_data_dir(char *buf, size_t n);
 
-/* The same, with `rel` appended: sw_data_path(b, n, "levels") or
+/* The same, with `rel` appended: sw_data_path(b, n, "maps") or
  * sw_data_path(b, n, "scores.tmp"). */
 bool sw_data_path(char *buf, size_t n, const char *rel);
 

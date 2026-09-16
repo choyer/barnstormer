@@ -87,7 +87,7 @@ static int soak(const char *name, playmode_t mode, int gamenum,
 
     printf("%-28s ", name);
     fflush(stdout);
-    game_start(g, &level_classic, mode, gamenum);
+    game_start(g, &map_classic, mode, gamenum);
 
     for (unsigned t = 0; t < ticks; t++) {
         uint16_t keys[MAX_PLYR] = { 0 };
@@ -95,7 +95,7 @@ static int soak(const char *name, playmode_t mode, int gamenum,
             keys[g->player] = scripted_keys(t);
         game_tick(g, keys);
         if (g->over)
-            game_start(g, &level_classic, mode, gamenum);
+            game_start(g, &map_classic, mode, gamenum);
         if ((t & 15) == 0)
             verify(g, t);
     }
@@ -113,7 +113,7 @@ static int soak(const char *name, playmode_t mode, int gamenum,
 static uint32_t run_hashed(playmode_t mode, int gamenum, unsigned ticks)
 {
     game_t *g = calloc(1, sizeof(*g));
-    game_start(g, &level_classic, mode, gamenum);
+    game_start(g, &map_classic, mode, gamenum);
     uint32_t h = 0;
     for (unsigned t = 0; t < ticks; t++) {
         uint16_t keys[MAX_PLYR] = { 0 };
@@ -183,7 +183,7 @@ static int wreckage(void)
 
     for (int pass = 0; pass < 2; pass++) {
         bool ox = pass == 1;
-        game_start(g, &level_classic, PLAY_COMPUTER, 0);
+        game_start(g, &map_classic, PLAY_COMPUTER, 0);
         object_t *victim = standing(g, ox ? OBJ_OX : OBJ_TARGET);
         check(victim != NULL, "no scenery to fly into", 0);
         if (!victim)
@@ -222,33 +222,33 @@ static int wreckage(void)
     return failures - before;
 }
 
-/* The clear-the-map counter has to come from the level, not from MAX_TARG:
- * an authored level (doc/LEVEL_FORMAT.md) may carry fewer buildings, and a
+/* The clear-the-map counter has to come from the map, not from MAX_TARG:
+ * an authored map (doc/MAP_FORMAT.md) may carry fewer buildings, and a
  * counter that starts above the number standing can never reach zero. */
-static int authored_levels(void)
+static int authored_maps(void)
 {
-    printf("%-28s ", "authored levels");
+    printf("%-28s ", "authored maps");
     fflush(stdout);
     int before = failures;
 
     game_t *g = calloc(1, sizeof(*g));
-    game_start(g, &level_classic, PLAY_COMPUTER, 0);
-    check(g->numtarg[1] == level_classic.n_targets - 3,
-          "the classic level does not start with 17 enemy buildings", 0);
+    game_start(g, &map_classic, PLAY_COMPUTER, 0);
+    check(g->numtarg[1] == map_classic.n_targets - 3,
+          "the classic map does not start with 17 enemy buildings", 0);
     check(g->numtarg[0] == 0, "the player's own buildings are counted", 0);
 
-    /* The same level, truncated: twelve buildings, of which the three either
+    /* The same map, truncated: twelve buildings, of which the three either
      * side of centre are the player's. */
-    level_t small = level_classic;
+    map_t small = map_classic;
     small.n_targets = 12;
     game_start(g, &small, PLAY_COMPUTER, 0);
-    check(g->numtarg[1] == 9, "a shorter level starts with the wrong count", 0);
+    check(g->numtarg[1] == 9, "a shorter map starts with the wrong count", 0);
 
     /* A dogfight arena with no buildings at all must still start. */
-    level_t bare = level_classic;
+    map_t bare = map_classic;
     bare.n_targets = 0;
     game_start(g, &bare, PLAY_COMPUTER, 0);
-    check(g->numtarg[1] == 0, "an empty level starts with buildings to clear",
+    check(g->numtarg[1] == 0, "an empty map starts with buildings to clear",
           0);
     for (unsigned t = 0; t < 200; t++) {
         uint16_t keys[MAX_PLYR] = { 0 };
@@ -259,10 +259,10 @@ static int authored_levels(void)
     /* The boards are three columns of scores made on the classic map, so a
      * run on anything else must not reach them however it ended. */
     g->end_reason = RUN_RETIRED;
-    check(!game_ranked(g), "an authored level ranks on the boards", 0);
-    game_start(g, &level_classic, PLAY_COMPUTER, 0);
+    check(!game_ranked(g), "an authored map ranks on the boards", 0);
+    game_start(g, &map_classic, PLAY_COMPUTER, 0);
     g->end_reason = RUN_RETIRED;
-    check(game_ranked(g), "the classic level stopped ranking", 0);
+    check(game_ranked(g), "the classic map stopped ranking", 0);
     free(g);
 
     printf("%s\n", failures == before ? "ok" : "FAILED");
@@ -280,7 +280,7 @@ int main(void)
     soak("flying, novice",          PLAY_NOVICE,   0, 8000, true);
     soak("flying, single g7",       PLAY_SINGLE,   7, 8000, true);
     soak("long run, vs computer",   PLAY_COMPUTER, 0, 60000, true);
-    authored_levels();
+    authored_maps();
     wreckage();
     determinism();
 

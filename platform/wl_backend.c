@@ -297,7 +297,7 @@ static uint16_t keysym_to_mask(xkb_keysym_t sym)
 
 /* A-Z and space, whatever the layout calls them; 0 for anything else. */
 /* Printable ASCII, as typed.  Case is preserved because the editor takes
- * level names and authors as text and "Bridge Too Far" is not the same thing
+ * map names and authors as text and "Bridge Too Far" is not the same thing
  * as "BRIDGE TOO FAR"; screens that want one case fold it themselves, which
  * score_char_valid() already did. */
 static char keysym_to_text(xkb_keysym_t sym)

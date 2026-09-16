@@ -87,11 +87,11 @@ else
     printf '  %-38s %s\n' "no score file for unranked runs" "ok"
 fi
 
-# ---- choosing a level ------------------------------------------------------
+# ---- choosing a map --------------------------------------------------------
 
-LVLDIR="$SANDBOX/barnstormer/levels"
-mkdir -p "$LVLDIR"
-printf 'barnstormer-level 1\nname Test Field\nauthor flow\nsize 3000 200\n\nground 3000:100\n\nrunway 400 0\nrunway 2400 1\n' > "$LVLDIR/test-field.lvl"
+MAPDIR="$SANDBOX/barnstormer/maps"
+mkdir -p "$MAPDIR"
+printf 'barnstormer-map 1\nname Test Field\nauthor flow\nsize 3000 200\n\nground 3000:100\n\nrunway 400 0\nrunway 2400 1\n' > "$MAPDIR/test-field.map"
 
 "$BIN" -q >/dev/null 2>&1 &
 GAME=$!
@@ -101,23 +101,23 @@ command -v hyprctl >/dev/null &&
 sleep 0.7
 
 expect alive  "the title comes up"
-key Down;     expect alive  "Down reaches the level row"
+key Down;     expect alive  "Down reaches the map row"
 key Return;   expect alive  "Enter opens the picker"
 key Down;     expect alive  "Down moves off the classic map"
-key Return;   expect alive  "Enter chooses the level"
+key Return;   expect alive  "Enter chooses the map"
 key Up;       expect alive  "Up goes back to the modes"
-key Return 1.5; expect alive "Enter flies the chosen level"
+key Return 1.5; expect alive "Enter flies the chosen map"
 key Escape;   expect alive  "Esc ends the run"
 key Escape;   expect alive  "Esc leaves the summary"
 key Escape 1.2; expect exited "Esc at the title quits"
 
-# ---- the level editor ------------------------------------------------------
+# ---- the map editor --------------------------------------------------------
 #
 # Same idea, on the other mode the binary has: drive it with the keys a person
-# would use and check that what falls out is a level file.
+# would use and check that what falls out is a map file.
 
-LVL="$SANDBOX/flow.lvl"
-"$BIN" --edit "$LVL" -q >/dev/null 2>&1 &
+MAP="$SANDBOX/flow.map"
+"$BIN" --edit "$MAP" -q >/dev/null 2>&1 &
 GAME=$!
 sleep 2
 command -v hyprctl >/dev/null &&
@@ -128,7 +128,7 @@ expect alive  "the editor opens on a new file"
 key t;        expect alive  "t picks the building tool"
 key space;    expect alive  "space places one"
 key n;        expect alive  "n opens the name field"
-# The field opens with what is already there -- "Flow", from flow.lvl -- so
+# The field opens with what is already there -- "Flow", from flow.map -- so
 # clear it the way a person would before typing over it.
 for _ in 1 2 3 4 5 6; do wtype -k BackSpace; sleep 0.08; done
 wtype "Flow Field"; sleep 0.6
@@ -139,24 +139,24 @@ key g;        expect alive  "g picks the building up"
 wtype -P Right; sleep 0.6; wtype -p Right; sleep 0.3
 key g;        expect alive  "g puts it down further along"
 key w;        expect alive  "w writes where it ended up"
-key Tab 1.5;  expect alive  "Tab flies the level"
+key Tab 1.5;  expect alive  "Tab flies the map"
 key Tab 1.2;  expect alive  "Tab comes back to editing"
 key f;        expect alive  "f flattens, leaving work unsaved"
 key Escape;   expect alive  "Esc with work unsaved does not leave"
 key Escape 1.2; expect exited "Esc again leaves"
 
-if grep -q '^barnstormer-level 1' "$LVL" 2>/dev/null &&
-   grep -q '^target ' "$LVL" 2>/dev/null; then
-    printf '  %-38s %s\n' "the editor wrote a level with a building" "ok"
+if grep -q '^barnstormer-map 1' "$MAP" 2>/dev/null &&
+   grep -q '^target ' "$MAP" 2>/dev/null; then
+    printf '  %-38s %s\n' "the editor wrote a map with a building" "ok"
 else
-    printf '  %-38s FAILED\n' "the editor wrote a level with a building"
+    printf '  %-38s FAILED\n' "the editor wrote a map with a building"
     failures=$((failures + 1))
 fi
 step=$((step + 1))
 
 # It was placed with the cursor at 1500, so a building 16 wide landed at 1492.
 # Anything further right means the move tool carried it.
-placed=$(awk '/^target /{print $2; exit}' "$LVL" 2>/dev/null)
+placed=$(awk '/^target /{print $2; exit}' "$MAP" 2>/dev/null)
 if [[ -n $placed ]] && (( placed > 1492 )); then
     printf '  %-38s %s\n' "the building moved where it was carried" "ok"
 else
@@ -167,7 +167,7 @@ fi
 step=$((step + 1))
 
 # Typed as "Flow Field", so the case has to have survived the keyboard.
-if grep -q '^name Flow Field$' "$LVL" 2>/dev/null; then
+if grep -q '^name Flow Field$' "$MAP" 2>/dev/null; then
     printf '  %-38s %s\n' "with the name that was typed into it" "ok"
 else
     printf '  %-38s FAILED\n' "with the name that was typed into it"

@@ -1,21 +1,21 @@
 /*
- * editor.h -- the level editor's model.
+ * editor.h -- the map editor's model.
  *
- * A mutable working copy of a level, plus the operations the editor's keys
+ * A mutable working copy of a map, plus the operations the editor's keys
  * drive.  It is deliberately separate from the drawing and the key handling:
  * everything here runs headlessly, which is what lets tests/edittest.c hold
  * the editing rules without a compositor.
  *
- * The working level is always valid.  Every operation that changes it checks
- * the result against level_check() -- the loader's own rules -- and puts the
- * level back the way it was if the change would break one, leaving the reason
- * in editor_status().  So a level under construction can always be flown, and
+ * The working map is always valid.  Every operation that changes it checks
+ * the result against map_check() -- the loader's own rules -- and puts the
+ * map back the way it was if the change would break one, leaving the reason
+ * in editor_status().  So a map under construction can always be flown, and
  * saving it can never produce a file the game would refuse to load.
  */
 #ifndef EDITOR_H
 #define EDITOR_H
 
-#include "level.h"
+#include "map.h"
 
 #define EDITOR_BRUSH_MIN   1
 #define EDITOR_BRUSH_MAX   80
@@ -47,19 +47,19 @@ typedef enum {
 } edcarry_t;
 
 typedef struct {
-    char name[LEVEL_NAME_MAX + 1];
-    char author[LEVEL_NAME_MAX + 1];
+    char name[MAP_NAME_MAX + 1];
+    char author[MAP_NAME_MAX + 1];
     uint32_t seed;
 
     uint8_t ground[MAX_X];
-    level_runway_t runways[LEVEL_MAX_RUNWAYS];
+    map_runway_t runways[MAP_MAX_RUNWAYS];
     int n_runways;
-    level_target_t targets[MAX_TARG];
+    map_target_t targets[MAX_TARG];
     int n_targets;
-    level_point_t oxen[MAX_OXEN];
+    map_point_t oxen[MAX_OXEN];
     int n_oxen;
 
-    level_t view;              /* a level_t over the arrays above          */
+    map_t view;                /* a map_t over the arrays above            */
 
     int cursor;                /* the world column the tools act on        */
     int brush;                 /* terrain brush half-width, in columns     */
@@ -68,29 +68,29 @@ typedef struct {
 
     edcarry_t carry;           /* what the cursor is carrying, if anything */
     int carry_i;               /* its index in the array it lives in       */
-    level_point_t carry_home;  /* where it was picked up from              */
+    map_point_t carry_home;    /* where it was picked up from              */
 
     edfield_t typing;          /* the field being typed, if any            */
-    char typebuf[LEVEL_NAME_MAX + 1];
+    char typebuf[MAP_NAME_MAX + 1];
 
     bool dirty;                /* changed since the last save              */
     char path[EDITOR_PATH_MAX];
     char status[EDITOR_STATUS_MAX];
 } editor_t;
 
-/* Start a level from nothing: a flat plain and the two runways every level
+/* Start a map from nothing: a flat plain and the two runways every map
  * needs, named after the file it will be saved to. */
 void editor_new(editor_t *ed, const char *path);
 
-/* Open `path`, or start a new level if there is nothing there yet.  Returns
- * 0, or -1 with level_error() set when the file is there but will not load --
- * an unreadable level is never silently replaced with a blank one. */
+/* Open `path`, or start a new map if there is nothing there yet.  Returns
+ * 0, or -1 with map_error() set when the file is there but will not load --
+ * an unreadable map is never silently replaced with a blank one. */
 int editor_open(editor_t *ed, const char *path);
 
 int editor_save(editor_t *ed);
 
-/* The working level, for flying, drawing or saving.  Valid at all times. */
-const level_t *editor_level(const editor_t *ed);
+/* The working map, for flying, drawing or saving.  Valid at all times. */
+const map_t *editor_map(const editor_t *ed);
 
 /* Navigation and tool selection; these cannot fail. */
 void editor_move(editor_t *ed, int dx);
@@ -114,11 +114,11 @@ int editor_erase(editor_t *ed);               /* whatever is at the cursor */
 
 /* Pick up whatever is under the cursor, so that moving the cursor moves it.
  * Returns 0, or -1 when there is nothing there.  What is carried keeps its
- * place in the level's arrays, which matters: a building's index decides
+ * place in the map's arrays, which matters: a building's index decides
  * whose side it is on and a runway's decides who spawns there, so this is not
  * the same thing as erasing it and putting down another.
  *
- * It stays a part of the level while it is carried, so it is still checked
+ * It stays a part of the map while it is carried, so it is still checked
  * every step: move it somewhere it cannot go and it simply stays put while
  * the cursor carries on, and catches up when the way is clear again. */
 int  editor_grab(editor_t *ed);

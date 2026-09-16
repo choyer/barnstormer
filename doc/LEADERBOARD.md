@@ -37,7 +37,7 @@ progression still works exactly as it does now.
 ## Boards
 
 Three, one per mode. A single shared board would be a vs-computer board in
-practice: single-player is capped at 2,175 a level (1,800 of enemy buildings
+practice: single-player is capped at 2,175 a map (1,800 of enemy buildings
 plus the 375 perfect-clear bonus), while vs-computer is unbounded because
 enemy pilots respawn unconditionally at +50 each.
 
@@ -143,8 +143,8 @@ startup error and never a crash at the moment of triumph.
 ## Default tables
 
 Seeded from the real ceilings rather than round numbers. Several entries are
-exact multiples of a perfect level (2,175 = 1,800 + 375), so the targets mean
-something: passing `ACE` on the single-player board is three clean levels.
+exact multiples of a perfect map (2,175 = 1,800 + 375), so the targets mean
+something: passing `ACE` on the single-player board is three clean maps.
 
 The tenth entry sets the bar for getting on the board at all, and the three
 differ on purpose -- novice welcomes a first attempt, vs-computer expects you
@@ -154,7 +154,7 @@ to have earned it.
 
 | # | Name | Score | |
 |---|---|---|---|
-| 1 | DLC | 15225 | seven perfect levels |
+| 1 | DLC | 15225 | seven perfect maps |
 | 2 | CRH | 13050 | six |
 | 3 | PUP | 11300 | |
 | 4 | DHH | 10875 | five |
@@ -163,14 +163,14 @@ to have earned it.
 | 7 | ACE | 6525 | three |
 | 8 | SKY | 4350 | two |
 | 9 | OWL | 2900 | |
-| 10 | PIP | 1225 | half a level -- a first run can rank |
+| 10 | PIP | 1225 | half a map -- a first run can rank |
 
 ### Single player
 
 | # | Name | Score | |
 |---|---|---|---|
 | 1 | DLC | 12400 | the original's author takes his own game |
-| 2 | CRH | 10875 | five perfect levels |
+| 2 | CRH | 10875 | five perfect maps |
 | 3 | VON | 9650 | |
 | 4 | RRH | 8700 | four |
 | 5 | SOP | 7125 | |
@@ -178,7 +178,7 @@ to have earned it.
 | 7 | RED | 5050 | |
 | 8 | CAM | 4350 | two |
 | 9 | ACE | 2975 | |
-| 10 | PUP | 1650 | under one clean level |
+| 10 | PUP | 1650 | under one clean map |
 
 ### Against the computer
 
@@ -193,7 +193,7 @@ to have earned it.
 | 7 | ACE | 21325 | |
 | 8 | SOP | 16750 | |
 | 9 | CAM | 11200 | |
-| 10 | TRI | 7650 | roughly three levels plus a hundred kills |
+| 10 | TRI | 7650 | roughly three maps plus a hundred kills |
 
 `DLC` is David L. Clark, whose copyright the title screen already carries.
 `SOP`, `CAM`, `PUP` and `TRI` are the Sopwith Camel, Pup and Triplane; `VON`
