@@ -70,7 +70,11 @@ same level, and the editor prints the same hash when it writes a file.
 [doc/LEVEL_FORMAT.md](doc/LEVEL_FORMAT.md) — plain text, hand-editable, and
 strictly checked: a file that would make a broken world is refused with the
 line that is wrong rather than loaded. Runs on an authored level are not
-ranked, because the high score boards are scores made on the classic map.
+ranked, because the high score boards are scores made on the classic map —
+a level with four buildings and no enemy would top them without meaning
+anything. What such a run gets instead is a personal best per level, kept
+against the level's own hash and shown in the **BEST** column of the picker,
+so a level of your own has something to beat without anything to farm.
 Levels you collect go in `~/.local/share/barnstormer/levels` (or
 `$XDG_DATA_HOME/barnstormer/levels`). Anything with a `.lvl` extension in
 there is offered by **LEVEL** on the title screen — pick one, then pick a mode

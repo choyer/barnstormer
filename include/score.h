@@ -20,14 +20,35 @@
 typedef struct {
     char name[SCORE_NAME_LEN + 1];
     int  score;
+    /* Set on an entry the board shows with a mark beside it.  Nothing
+     * written today sets it; entries saved by a build that did keep theirs,
+     * which is why the loader and the board still know about it. */
+    bool marked;
 } score_entry_t;
 
 typedef struct {
     score_entry_t e[SCORE_ROWS];
 } score_table_t;
 
+/* A personal best per level, keyed by level_hash() -- the identity the file
+ * format guarantees (doc/LEVEL_FORMAT.md), so two copies of a level share a
+ * best and an edited level is a different level.  Authored levels never
+ * reach the boards, since a board is a comparison between runs on one fixed
+ * world; this is the player against themselves on a world of their own.
+ *
+ * Oldest first: a new level past the end of a full table evicts the least
+ * recently beaten, which is also the order the file is written in. */
+#define SCORE_BESTS 64
+
+typedef struct {
+    uint32_t level;                      /* level_hash()                  */
+    int      score;
+} score_best_t;
+
 typedef struct {
     score_table_t board[SCORE_BOARDS];
+    score_best_t best[SCORE_BESTS];
+    int  n_best;
     char last_name[SCORE_NAME_LEN + 1];  /* pre-filled on the next entry  */
     bool dials;                          /* the throttle/airspeed strip   */
     bool loaded_defaults;                /* nothing on disk yet           */
@@ -51,6 +72,14 @@ int  scores_rank(const scores_t *s, playmode_t mode, int score);
 /* Slot an entry in, dropping the tenth.  Returns the row it landed on, or
  * -1 if it did not rank after all. */
 int  scores_insert(scores_t *s, playmode_t mode, const char *name, int score);
+
+/* The best score recorded on the level with this hash, or 0 if there is no
+ * record of it.  A hash of 0 means "no hash to compare" and never matches. */
+int  scores_best(const scores_t *s, uint32_t level);
+
+/* Record `score` against a level if it beats what is there.  True when it
+ * did, so the caller can say so on screen. */
+bool scores_best_set(scores_t *s, uint32_t level, int score);
 
 /* Write the table out.  False means the score could not be saved, which the
  * caller should say on screen rather than treat as fatal. */

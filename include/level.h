@@ -93,6 +93,7 @@ typedef struct {
     char path[512];
     char name[LEVEL_NAME_MAX + 1];
     char author[LEVEL_NAME_MAX + 1];
+    uint32_t hash;                  /* level_hash(), the level's identity */
 } level_info_t;
 
 /* Where user levels live: $XDG_DATA_HOME/barnstormer/levels, or

@@ -92,6 +92,10 @@ typedef struct {
     int sel;
     int skipped;              /* files there that would not load          */
     const char *dir;          /* where they live, for when there are none */
+    /* The player's best on each level, 0 for one they have not finished.
+     * `best[i]` goes with `items[i]`; `best_classic` is row 0. */
+    const int *best;
+    int best_classic;
 } levelpick_t;
 
 void render_levels(framebuf_t *fb, const render_ctx_t *c,
@@ -102,12 +106,22 @@ void render_gameover(framebuf_t *fb, const render_ctx_t *c, game_t *g);
 
 /* The end-of-run screen: what you scored, then the board.  `highlight` is a
  * row to pick out (-1 for none) and `edit_cell` is the initial being typed
- * (0-2, or -1 when the score is not being entered). */
+ * (0-2, or -1 when the score is not being entered).
+ *
+ * `headline` NULL means there is no run to report -- the attract cycle on an
+ * idle title screen -- so the headline, the score line and the ranked note
+ * are left out and the footer says how to get back rather than how to play
+ * again. */
 typedef struct {
-    const char *headline;        /* GAME OVER / RETIRED / ABANDONED       */
+    const char *headline;        /* GAME OVER / RETIRED / ABANDONED, or
+                                    NULL for the attract cycle            */
     const char *board_name;
     int   final_score;
     bool  ranked;                /* false prints NOT RANKED               */
+    /* The player's best on the level just flown, shown when the run did
+     * not rank so that a level of one's own still has something to beat.
+     * Zero prints nothing. */
+    int   level_best;
     const score_table_t *table;
     int   highlight;
     int   edit_cell;

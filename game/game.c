@@ -670,6 +670,15 @@ void game_start(game_t *g, const level_t *level, playmode_t mode, int gamenum)
     build_world(g);
 }
 
+void game_set_reserve(game_t *g, int crashes)
+{
+    if (crashes < 1)
+        crashes = 1;
+    if (crashes > 99)
+        crashes = 99;
+    g->maxcrash = crashes;
+}
+
 void game_restart(game_t *g)
 {
     int score = g->pool[0].score;

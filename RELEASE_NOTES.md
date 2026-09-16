@@ -48,6 +48,20 @@ writes a file and when `--level` loads one, so two people can check they hold
 the same level however their copies are laid out. The classic map is
 `3b7788af`.
 
+### A best per level
+
+The three boards stay what they are: scores flown on the classic map. A run
+on a level somebody wrote is still not ranked against them -- an easy map
+would top them without meaning anything -- but it is no longer thrown away
+either. Each level keeps the best score you have flown on it, stored against
+`level_hash()` rather than a filename, so two copies of a level share a best
+and an edited level is a different level. The picker shows it in a **BEST**
+column beside the author, and the end-of-run screen says what there is to
+beat when the run did not rank.
+
+Sixty-four levels are remembered; past that the least recently beaten makes
+way, so the ones being flown are the ones kept.
+
 ### Fixed
 
 The count of enemy buildings still standing was a constant rather than a count
@@ -55,6 +69,13 @@ of the buildings on the level, so any level with fewer than twenty of them
 could never be cleared and the `TARGETS` readout started wrong. It is now
 tallied as the buildings go up. The classic map is unaffected -- it has
 exactly twenty.
+
+A building or an ox that had been destroyed was taken off the screen but left
+in the collision list, so the square of empty sky where it had stood still
+brought an aircraft down. Destroying one now removes it from that list, which
+is what the game already did with an aircraft that had left the run. Flying
+into something still standing, or into the explosion that has just taken it
+down, is unchanged.
 
 ## Changes in 1.3.0
 

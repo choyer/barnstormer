@@ -135,6 +135,64 @@ int main(void)
     ok("a space inside a name round-trips",
        !strcmp(spaced.board[0].e[0].name, "A B"));
 
+    /* ---- a mark on an entry saved by an older build still shows ----
+     *
+     * Nothing inserts a marked entry now: a run that is not flown on the
+     * ordinary allowance is shown and not ranked.  Entries already on
+     * somebody's board have to survive being loaded and saved, though. */
+    scores_load(&s);
+    ok("an insert today is unmarked",
+       scores_insert(&s, PLAY_COMPUTER, "MRK", 70000) == 0 &&
+       !s.board[2].e[0].marked);
+    s.board[2].e[0].marked = true;              /* as an older build left it */
+    scores_save(&s);
+    scores_t marks;
+    scores_load(&marks);
+    ok("a mark already on the board survives a reload",
+       marks.board[2].e[0].marked && !strcmp(marks.board[2].e[0].name, "MRK"));
+    ok("and an unmarked entry does not acquire one",
+       !marks.board[2].e[1].marked && !marks.board[0].e[0].marked);
+
+    /* ---- one best per level, keyed by the level's hash ---- */
+    scores_load(&s);
+    ok("a level nobody has flown has no best", scores_best(&s, 0xabcd1234u) == 0);
+    ok("the first score on a level is recorded",
+       scores_best_set(&s, 0xabcd1234u, 4000));
+    ok("and is what is reported back", scores_best(&s, 0xabcd1234u) == 4000);
+    ok("a worse run does not replace it",
+       !scores_best_set(&s, 0xabcd1234u, 3999) &&
+       scores_best(&s, 0xabcd1234u) == 4000);
+    ok("a tie does not replace it either",
+       !scores_best_set(&s, 0xabcd1234u, 4000));
+    ok("a better run does", scores_best_set(&s, 0xabcd1234u, 4001) &&
+       scores_best(&s, 0xabcd1234u) == 4001);
+    ok("levels are independent",
+       scores_best_set(&s, 0x11112222u, 10) &&
+       scores_best(&s, 0xabcd1234u) == 4001 &&
+       scores_best(&s, 0x11112222u) == 10);
+    ok("a level with no hash is never recorded",
+       !scores_best_set(&s, 0, 5000) && scores_best(&s, 0) == 0);
+    ok("nor is a score of nothing", !scores_best_set(&s, 0x33334444u, 0));
+
+    scores_save(&s);
+    scores_t bests;
+    scores_load(&bests);
+    ok("bests survive a reload",
+       scores_best(&bests, 0xabcd1234u) == 4001 &&
+       scores_best(&bests, 0x11112222u) == 10);
+
+    /* Past the table's size the least recently beaten goes, and what is
+     * still being flown stays. */
+    for (uint32_t h = 1; h <= SCORE_BESTS + 4; h++)
+        scores_best_set(&bests, 0x50000000u + h, (int)h * 10);
+    ok("the table holds its size", bests.n_best == SCORE_BESTS);
+    ok("the newest levels are kept",
+       scores_best(&bests, 0x50000000u + SCORE_BESTS + 4) ==
+       (int)(SCORE_BESTS + 4) * 10);
+    ok("and the oldest were evicted",
+       scores_best(&bests, 0xabcd1234u) == 0 &&
+       scores_best(&bests, 0x50000001u) == 0);
+
     /* ---- the dials setting rides along ---- */
     scores_load(&s);
     ok("dials default to off", !s.dials);

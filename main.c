@@ -26,7 +26,59 @@ extern const int sw_title_menu_len;
 #endif
 
 typedef enum { UI_TITLE, UI_PLAY, UI_PAUSED, UI_OVER, UI_ENTRY,
-               UI_EDIT, UI_LEVELS } uistate_t;
+               UI_EDIT, UI_LEVELS, UI_ATTRACT } uistate_t;
+
+/* Left alone on the title screen, the game starts showing off: after
+ * TITLE_IDLE_SECS with nothing typed it cycles the three high score boards,
+ * ATTRACT_BOARD_SECS each, until a key brings the menu back. */
+#define TITLE_IDLE_SECS     65.0
+#define ATTRACT_BOARD_SECS  15.0
+
+/* The boards in the order the attract cycle shows them, which is the order
+ * they are listed on the title screen. */
+static const playmode_t attract_modes[SCORE_BOARDS] = {
+    PLAY_NOVICE, PLAY_SINGLE, PLAY_COMPUTER,
+};
+
+/* A digest of the menu keys pressed just after launch, and how long there is
+ * to press them.  The title screen recognises one pattern this way: it is
+ * compared as a digest rather than matched key by key, which keeps the
+ * comparison to one branch on the hot path and the table out of the binary.
+ *
+ * KEY_DIGEST_SEED/STEP are the usual 32-bit FNV-1a pair. */
+#define KEY_DIGEST_SEED   2166136261u
+#define KEY_DIGEST_STEP     16777619u
+#define KEY_DIGEST_MATCH  0xd41e839du
+#define KEY_WINDOW_OPEN     3.0     /* seconds from launch to the first key */
+#define KEY_WINDOW_SPAN     3.5     /* seconds from that key to the last    */
+#define KEY_RESERVE          30     /* the allowance a match asks for       */
+
+/* Letters are folded to upper case so the digest does not depend on whether
+ * shift happened to be down. */
+static uint32_t key_digest(uint32_t d, int ev)
+{
+    if (SWKEY_IS_CHAR(ev)) {
+        char ch = SWKEY_CHAR(ev);
+        if (ch >= 'a' && ch <= 'z')
+            ev = SWKEY_CHAR_BASE + (ch - 'a' + 'A');
+    }
+    return (d ^ (uint32_t)ev) * KEY_DIGEST_STEP;
+}
+
+/* A short square-wave flourish over the first half second of a run that
+ * begins on the other allowance: a rising arpeggio, the speaker's way of
+ * saying the run is not an ordinary one.  Divisors, like every other sound
+ * in the game -- the speaker only ever took those. */
+#define CHIME_DIV(hz)  ((unsigned)(PIT_CLOCK_HZ / (hz) + 0.5))
+
+static const struct { unsigned div; double secs; } chime[] = {
+    { CHIME_DIV(523.25), 0.06 },    /* C5 */
+    { CHIME_DIV(659.26), 0.06 },    /* E5 */
+    { CHIME_DIV(783.99), 0.06 },    /* G5 */
+    { CHIME_DIV(1046.5), 0.06 },    /* C6 */
+    { CHIME_DIV(1568.0), 0.22 },    /* G6, held                           */
+};
+#define CHIME_NOTES  ((int)(sizeof(chime) / sizeof(chime[0])))
 
 /* SIGUSR1 asks for the keyboard back, for a keybind to fire at the game when
  * the overlay has been left deaf.  See platform_regrab(). */
@@ -276,9 +328,26 @@ int main(int argc, char **argv)
     int menu_sel = (mode == PLAY_NOVICE) ? 0 : (mode == PLAY_SINGLE ? 1 : 2);
     unsigned title_t = 0;
 
+    /* Seconds since the last key on the title screen, and where the attract
+     * cycle has got to once that runs out. */
+    double idle_t = 0.0;
+    double attract_acc = 0.0;
+    int attract_board = 0;
+
+    /* The launch key window: open until it expires, and never reopened, so
+     * what it recognises is only reachable on a freshly started game. */
+    uint32_t key_dig = KEY_DIGEST_SEED;
+    double key_first = 0.0;
+    bool key_open = !skip_title && !edit_path;
+    bool key_armed = false;      /* the pattern was completed in time     */
+    bool run_marked = false;     /* this run flies on the other allowance */
+    int chime_at = CHIME_NOTES;  /* CHIME_NOTES when nothing is playing   */
+    double chime_t = 0.0;
+
     const double tick_dt = 1.0 / GAME_TICK_HZ;
     const double snd_dt = 1.0 / SOUND_ADJ_HZ;
     double last = now_seconds();
+    double shown = 0.0;         /* when the first frame reached the screen */
     double tick_acc = 0.0, snd_acc = 0.0;
     long frames = 0;
     bool running = true;
@@ -293,6 +362,8 @@ int main(int argc, char **argv)
     int  cell = 0;              /* initial being edited                   */
     int  final_score = 0;
     bool saved = true;
+    bool ranked_run = false;    /* the finished run reached a board        */
+    int  level_best = 0;        /* best ever flown on the level just flown */
     unsigned over_t = 0;
 
     while (running && platform_poll(plat)) {
@@ -323,6 +394,27 @@ int main(int argc, char **argv)
 
         int ev;
         while ((ev = platform_take_event(plat)) != SWKEY_NONE) {
+            /* Any key counts as somebody being there: it puts the idle
+             * timer back to zero, and the one that ends the attract cycle
+             * only does that -- Esc should not quit the game on the way
+             * back from a screen the player never asked for. */
+            idle_t = 0.0;
+            if (ui == UI_ATTRACT) {
+                ui = UI_TITLE;
+                continue;
+            }
+
+            /* Menu keys go through the digest on their way to the switch
+             * below, so a pattern is recognised before the last key of it
+             * is acted on. */
+            if (key_open && ui == UI_TITLE) {
+                if (key_dig == KEY_DIGEST_SEED)
+                    key_first = t;
+                key_dig = key_digest(key_dig, ev);
+                if (key_dig == KEY_DIGEST_MATCH)
+                    key_armed = true;
+            }
+
             /* The editor takes the keyboard whole: its letters mean editing,
              * not sound and restart, and the arrows are read as held keys
              * further down rather than as events. */
@@ -355,6 +447,7 @@ int main(int argc, char **argv)
 
                 if (ev == SWKEY_TAB) {
                     game_start(&game, editor_level(&editor), mode, gamenum);
+                    run_marked = false;
                     flying = true;
                     ui = UI_PLAY;
                 } else if (ev == SWKEY_QUIT) {
@@ -451,7 +544,8 @@ int main(int argc, char **argv)
                 } else if (ev == SWKEY_ENTER || ev == SWKEY_QUIT) {
                     /* Esc commits too: nobody should lose a high score to
                      * the key they habitually press to get out of things. */
-                    rank = scores_insert(&scores, mode, initials, final_score);
+                    rank = scores_insert(&scores, mode, initials,
+                                         final_score);
                     saved = scores_save(&scores);
                     int b = score_board_of(mode);
                     board = scores.board[b < 0 ? 0 : b];
@@ -540,9 +634,22 @@ int main(int argc, char **argv)
                     mode = (menu_sel == 0) ? PLAY_NOVICE
                          : (menu_sel == 1) ? PLAY_SINGLE : PLAY_COMPUTER;
                     game_start(&game, level, mode, gamenum);
+                    /* The window shuts behind the run it applies to: the
+                     * allowance belongs to this game, not to the next. */
+                    run_marked = key_armed;
+                    if (run_marked) {
+                        game_set_reserve(&game, KEY_RESERVE);
+                        if (game.sound_on) {
+                            chime_at = 0;
+                            chime_t = 0.0;
+                        }
+                    }
+                    key_open = false;
+                    key_armed = false;
                     ui = UI_PLAY;
                 } else if (ui == UI_OVER) {
                     game_start(&game, level, mode, gamenum);
+                    run_marked = false;
                     ui = UI_PLAY;
                 }
                 break;
@@ -550,6 +657,7 @@ int main(int argc, char **argv)
             case SWKEY_RESTART:
                 if (ui == UI_PLAY) {
                     game_start(&game, level, mode, gamenum);
+                    run_marked = false;
                 }
                 break;
 
@@ -575,6 +683,42 @@ int main(int argc, char **argv)
             int lift = ((held & K_FLAPU) ? 1 : 0) - ((held & K_FLAPD) ? 1 : 0);
             if (lift && (frames % 3) == 0)
                 editor_raise(&editor, lift);
+        }
+
+        /* The title screen left alone turns into the attract cycle, and the
+         * cycle steps from one board to the next.  Both run on real seconds
+         * rather than frames, so they take as long on a 60 Hz panel as on a
+         * 144 Hz one. */
+        if (ui == UI_TITLE) {
+            idle_t += dt;
+            if (idle_t >= TITLE_IDLE_SECS) {
+                attract_board = 0;
+                attract_acc = 0.0;
+                ui = UI_ATTRACT;
+            }
+        } else if (ui == UI_ATTRACT) {
+            attract_acc += dt;
+            if (attract_acc >= ATTRACT_BOARD_SECS) {
+                attract_acc -= ATTRACT_BOARD_SECS;
+                attract_board = (attract_board + 1) % SCORE_BOARDS;
+            }
+        } else {
+            idle_t = 0.0;
+        }
+
+        /* The window is a startup affair, timed from the first frame on the
+         * screen rather than from the first line of main(): what a player
+         * sees start is the title coming up.  It closes when its time is up,
+         * or the moment the title screen is left for anything else, and
+         * there is nothing that opens it again. */
+        if (key_open && shown > 0.0) {
+            bool untouched = key_dig == KEY_DIGEST_SEED;
+            if (ui != UI_TITLE ||
+                (untouched  && t - shown     > KEY_WINDOW_OPEN) ||
+                (!untouched && t - key_first > KEY_WINDOW_SPAN)) {
+                key_open = false;
+                key_armed = false;
+            }
         }
 
         if (ui == UI_PLAY) {
@@ -614,10 +758,26 @@ int main(int argc, char **argv)
             int b = score_board_of(mode);
             if (b < 0) b = 0;
             final_score = game_player(&game)->score;
-            rank = game_ranked(&game)
-                       ? scores_rank(&scores, mode, final_score) : -1;
+
+            /* A run on the larger allowance is not a run the boards can be
+             * compared against, any more than a run on somebody's own level
+             * is: it is shown and not ranked. */
+            ranked_run = game_ranked(&game) && !run_marked;
+            rank = ranked_run ? scores_rank(&scores, mode, final_score) : -1;
             board = scores.board[b];
             over_t = 0;
+
+            /* What a level is worth to the player who flew it, whether or
+             * not any board will take it.  Keyed by the level's own hash, so
+             * two copies of a level share a best and an edited one does not
+             * inherit it. */
+            level_best = 0;
+            if (game_completed(&game) && !run_marked) {
+                uint32_t id = level_hash(level);
+                if (scores_best_set(&scores, id, final_score))
+                    scores_save(&scores);
+                level_best = scores_best(&scores, id);
+            }
 
             if (rank >= 0) {
                 memcpy(initials, scores.last_name, sizeof(initials));
@@ -632,8 +792,25 @@ int main(int argc, char **argv)
             }
         }
 
-        audio_tone(audio, (ui == UI_PLAY && game.sound_on)
-                              ? (unsigned)game.sound.tone : 0u);
+        /* While it lasts the chime owns the speaker: one square wave at a
+         * time is all there ever was, and the engine has the rest of the
+         * run to be heard in.  Switching sound off cuts it short. */
+        if (chime_at < CHIME_NOTES) {
+            if (!game.sound_on || ui != UI_PLAY) {
+                chime_at = CHIME_NOTES;
+            } else {
+                chime_t += dt;
+                while (chime_at < CHIME_NOTES && chime_t >= chime[chime_at].secs) {
+                    chime_t -= chime[chime_at].secs;
+                    chime_at++;
+                }
+            }
+        }
+
+        audio_tone(audio,
+                   chime_at < CHIME_NOTES ? chime[chime_at].div
+                   : (ui == UI_PLAY && game.sound_on)
+                         ? (unsigned)game.sound.tone : 0u);
         audio_pump(audio, dt);
 
         framebuf_t *fb = platform_begin_frame(plat);
@@ -661,14 +838,38 @@ int main(int argc, char **argv)
                 render_title(fb, &ctx, title_t++, menu_sel,
                              custom ? custom->name : NULL);
                 break;
+            case UI_ATTRACT: {
+                /* No run to report, so no headline and no score line: just
+                 * the board whose turn it is. */
+                playmode_t m = attract_modes[attract_board];
+                scoreboard_t v = {
+                    .headline   = NULL,
+                    .board_name = score_board_name(m),
+                    .table      = &scores.board[score_board_of(m)],
+                    .highlight  = -1,
+                    .edit_cell  = -1,
+                    .saved      = true,
+                    .t          = title_t++,
+                };
+                render_scores(fb, &ctx, &v);
+                break;
+            }
             case UI_LEVELS: {
                 char dir[512];
+                /* One personal best per level, looked up by the hash
+                 * level_list() recorded while it had the level open. */
+                int bests[LEVEL_LIST_MAX];
+                for (int i = 0; i < n_levels; i++)
+                    bests[i] = scores_best(&scores, levels[i].hash);
                 levelpick_t v = {
                     .items   = levels,
                     .n       = n_levels,
                     .sel     = level_sel,
                     .skipped = levels_skipped,
                     .dir     = level_dir(dir, sizeof(dir)) ? dir : NULL,
+                    .best    = bests,
+                    .best_classic = scores_best(&scores,
+                                                level_hash(&level_classic)),
                 };
                 render_levels(fb, &ctx, &v);
                 break;
@@ -721,14 +922,16 @@ int main(int argc, char **argv)
                     .headline    = game.over_msg ? game.over_msg : "GAME OVER",
                     .board_name  = score_board_name(mode),
                     .final_score = final_score,
-                    .ranked      = game_ranked(&game),
+                    .ranked      = ranked_run,
+                    .level_best  = level_best,
                     .table       = &board,
                     .highlight   = rank,
                     .edit_cell   = ui == UI_ENTRY ? cell : -1,
                     .saved       = saved,
                     .t           = over_t++,
                 };
-                render_frame(fb, &ctx, &game);
+                /* render_scores() draws its own plain background: the board
+                 * is a page like the menus, not a caption over the world. */
                 render_scores(fb, &ctx, &v);
                 break;
             }
@@ -737,6 +940,8 @@ int main(int argc, char **argv)
                 dump_ppm(fb, dump_path);
                 running = false;
             }
+            if (shown == 0.0)
+                shown = t;
             frames++;
             platform_end_frame(plat);
         }

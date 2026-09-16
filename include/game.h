@@ -92,17 +92,24 @@ struct game {
     runend_t end_reason;           /* how it finished, and whether it ranks */
 };
 
-/* Whether a finished run counts for the high score table.  Flying into the
- * ground for the fifth time and retiring at your own airfield both do;
- * bailing out mid-air forfeits the score.
+/* Whether a run finished rather than being walked out of: flying into the
+ * ground for the last time and retiring at your own airfield both count,
+ * bailing out mid-air does not.  What a score is worth recording against at
+ * all, wherever it gets recorded. */
+static inline bool game_completed(const game_t *g)
+{
+    return g->end_reason == RUN_CRASHED || g->end_reason == RUN_RETIRED;
+}
+
+/* Whether a finished run counts for the high score table.
  *
- * So does a run on an authored level: the boards are three columns of scores
- * made on the classic map, and a level with four buildings and no enemy would
- * top them without meaning anything. */
+ * A board is a comparison between runs on one fixed world, so a run on an
+ * authored level does not reach one: a level with four buildings and no
+ * enemy would top it without meaning anything.  Those runs are kept as a
+ * best per level instead (scores_best()). */
 static inline bool game_ranked(const game_t *g)
 {
-    return (g->end_reason == RUN_CRASHED || g->end_reason == RUN_RETIRED) &&
-           g->level == &level_classic;
+    return game_completed(g) && g->level == &level_classic;
 }
 
 /* Where a building placed at world column `x` stands.  Shared with the level
@@ -111,6 +118,11 @@ int game_pad_height(const uint8_t *ground, int x);
 
 /* Build a fresh run.  `level` must outlive the game. */
 void game_start(game_t *g, const level_t *level, playmode_t mode, int gamenum);
+
+/* How many crashes the run allows, replacing the default set by
+ * game_start().  Clamped to something the LIFE gauge can draw; call it
+ * after the game has been started, since starting one resets it. */
+void game_set_reserve(game_t *g, int crashes);
 
 /* Advance one tick.  `keys[i]` is the K_* bitmask for player i. */
 void game_tick(game_t *g, const uint16_t *keys);

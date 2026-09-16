@@ -660,6 +660,10 @@ int level_list(level_info_t *out, int max, int *skipped)
         snprintf(out[n].name, sizeof(out[n].name), "%s", lv->name);
         snprintf(out[n].author, sizeof(out[n].author), "%s",
                  lv->author ? lv->author : "");
+        /* Hashed while the level is in hand: it is what anything keeping a
+         * record per level has to key on, and it costs one pass here
+         * instead of a second load later. */
+        out[n].hash = level_hash(lv);
         n++;
         level_free(lv);
     }

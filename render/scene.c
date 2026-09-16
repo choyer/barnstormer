@@ -566,12 +566,20 @@ typedef struct {
 #define CTL_ROWS   5
 #define CTL_GAP    3        /* blank characters between columns             */
 
+#define TITLE_MARK  "> "     /* what points at the row the keys will act on */
+
 typedef struct {
-    const char *text;   /* NULL when this row is CTL_COLS control pairs    */
-    const control_t *ctl;
+    const char *text;   /* NULL when this row is keys rather than prose   */
+    const control_t *ctl;   /* CTL_COLS pairs, laid out as a grid column  */
+    const control_t *pair;  /* n_pair pairs, laid out as one centred row  */
+    int n_pair;
+    /* Drawn in the margin to the left of `text`, which stays centred on
+     * itself: a selection marker should not shove the word it points at. */
+    const char *mark;
     int scale;          /* multiples of the base text size                */
     int pal;
     int gap;            /* extra space below, in base text units          */
+    bool blink;         /* flashes, for the line that says press a key    */
 } title_line_t;
 
 /* Column widths are measured from the keys and actions actually in each
@@ -604,6 +612,31 @@ static int ctl_layout(int keyw[CTL_COLS], int xoff[CTL_COLS])
     return x;
 }
 
+/* A single row of key/action pairs, laid out and coloured the way the title
+ * screen's control block is -- key bright, action dim, one space between a
+ * key and what it does and CTL_GAP between pairs -- so a screen with only
+ * two keybinds to name still names them in the same voice.  The width is in
+ * characters, for the callers that measure their layout before drawing it. */
+static int ctl_row_width(const control_t *p, int n)
+{
+    int w = 0;
+    for (int i = 0; i < n; i++)
+        w += (int)strlen(p[i].key) + 1 + (int)strlen(p[i].act) +
+             (i < n - 1 ? CTL_GAP : 0);
+    return w;
+}
+
+static void ctl_row_draw(framebuf_t *fb, int x, int y, int sc,
+                         const control_t *p, int n)
+{
+    for (int i = 0; i < n; i++) {
+        fb_text(fb, x, y, sc, sw_palette[PAL_HUD], p[i].key);
+        x += ((int)strlen(p[i].key) + 1) * 6 * sc;
+        fb_text(fb, x, y, sc, sw_palette[PAL_HUD_DIM], p[i].act);
+        x += ((int)strlen(p[i].act) + CTL_GAP) * 6 * sc;
+    }
+}
+
 void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
                   int menu_sel, const char *level_name)
 {
@@ -615,35 +648,46 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
 
     /* The last row says which world the three above it will be flown on. */
     char level_row[40];
-    snprintf(level_row, sizeof(level_row), "LEVEL: %.22s",
+    snprintf(level_row, sizeof(level_row), "Play Level: %.22s",
              level_name ? level_name : "THE CLASSIC MAP");
 
-    char menu[4][48];
+    /* The rows carry no marker of their own: it is drawn in the margin, so
+     * each row is centred on the words rather than on the words plus two
+     * characters of gutter. */
+    const char *menu[4];
     for (int i = 0; i < sw_title_menu_len; i++)
-        snprintf(menu[i], sizeof(menu[i]), "%s%s",
-                 i == menu_sel ? "> " : "  ",
-                 title_menu[i] ? title_menu[i] : level_row);
+        menu[i] = title_menu[i] ? title_menu[i] : level_row;
 
     title_line_t lines[] = {
-        { "SOPWITH",                          NULL, 4, PAL_TEAM1,   0 },
-        { "BARNSTORMER",                      NULL, 3, PAL_TITLE2,  2 },
-        { "(C) COPYRIGHT 1984-2000 DAVID L. CLARK", NULL,
-                                                    1, PAL_HUD_DIM, 0 },
-        { "WAYLAND IMPLEMENTATION 2026 CARL HOYER", NULL,
-                                                    1, PAL_HUD_DIM, 3 },
-        { menu[0], NULL, 2, menu_sel == 0 ? PAL_HUD : PAL_HUD_DIM, 0 },
-        { menu[1], NULL, 2, menu_sel == 1 ? PAL_HUD : PAL_HUD_DIM, 0 },
-        { menu[2], NULL, 2, menu_sel == 2 ? PAL_HUD : PAL_HUD_DIM, 1 },
-        { menu[3], NULL, 2, menu_sel == 3 ? PAL_HUD : PAL_TITLE2,   3 },
-        { NULL, &sw_controls[0],  1, PAL_HUD_DIM, 0 },
-        { NULL, &sw_controls[3],  1, PAL_HUD_DIM, 0 },
-        { NULL, &sw_controls[6],  1, PAL_HUD_DIM, 0 },
-        { NULL, &sw_controls[9],  1, PAL_HUD_DIM, 0 },
-        { NULL, &sw_controls[12], 1, PAL_HUD_DIM, 3 },
-        { "PRESS ENTER TO FLY",               NULL, 2, PAL_TEAM1,   0 },
+        { .text = "SOPWITH",     .scale = 4, .pal = PAL_TEAM1  },
+        { .text = "BARNSTORMER", .scale = 3, .pal = PAL_TITLE2, .gap = 3 },
+        { .text = menu[0], .scale = 2,
+          .mark = menu_sel == 0 ? TITLE_MARK : NULL,
+          .pal = menu_sel == 0 ? PAL_HUD : PAL_HUD_DIM },
+        { .text = menu[1], .scale = 2,
+          .mark = menu_sel == 1 ? TITLE_MARK : NULL,
+          .pal = menu_sel == 1 ? PAL_HUD : PAL_HUD_DIM },
+        { .text = menu[2], .scale = 2,
+          .mark = menu_sel == 2 ? TITLE_MARK : NULL,
+          .pal = menu_sel == 2 ? PAL_HUD : PAL_HUD_DIM, .gap = 1 },
+        { .text = menu[3], .scale = 1,
+          .mark = menu_sel == 3 ? TITLE_MARK : NULL,
+          .pal = menu_sel == 3 ? PAL_HUD : PAL_TITLE2,  .gap = 3 },
+        { .ctl = &sw_controls[0],  .scale = 1, .pal = PAL_HUD_DIM },
+        { .ctl = &sw_controls[3],  .scale = 1, .pal = PAL_HUD_DIM },
+        { .ctl = &sw_controls[6],  .scale = 1, .pal = PAL_HUD_DIM },
+        { .ctl = &sw_controls[9],  .scale = 1, .pal = PAL_HUD_DIM },
+        { .ctl = &sw_controls[12], .scale = 1, .pal = PAL_HUD_DIM, .gap = 3 },
+        { .text = "PRESS ENTER TO FLY", .scale = 2, .pal = PAL_TEAM1,
+          .gap = 3, .blink = true },
+        /* The credits sit under the whole screen rather than under the
+         * title: they are what the game is, not what to do with it. */
+        { .text = "(C) COPYRIGHT 1984-2000 DAVID L. CLARK",
+          .scale = 1, .pal = PAL_HUD_DIM },
+        { .text = "WAYLAND IMPLEMENTATION 2026 CARL HOYER",
+          .scale = 1, .pal = PAL_HUD_DIM },
     };
     const int n = (int)(sizeof(lines) / sizeof(lines[0]));
-    const int nblink = 1;      /* trailing lines that blink               */
 
     /* Shrink until the whole stack fits with room to breathe, so the title
      * reads the same in a small window and on a 4K overlay. */
@@ -654,9 +698,13 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
         for (int i = 0; i < n; i++) {
             total += (7 + 3 + lines[i].gap * 3) * ts * lines[i].scale;
             int sc = ts * lines[i].scale;
+            /* The marker hangs in the margin on both sides of the centred
+             * text, so a marked row does not widen the block lopsidedly. */
+            int markw = lines[i].mark
+                            ? fb_text_width(sc, lines[i].mark) * 2 : 0;
             int kw[CTL_COLS], xo[CTL_COLS];
             int w = lines[i].ctl ? ctl_layout(kw, xo) * 6 * sc
-                                 : fb_text_width(sc, lines[i].text);
+                                 : fb_text_width(sc, lines[i].text) + markw;
             if (w > widest)
                 widest = w;
         }
@@ -701,7 +749,7 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
 
     for (int i = 0; i < n; i++) {
         int sc = ts * lines[i].scale;
-        bool blink = (i >= n - nblink);
+        bool blink = lines[i].blink;
         if (lines[i].ctl) {
             /* Key bright, action dim: the keys are what the eye hunts for. */
             int kw[CTL_COLS], xo[CTL_COLS];
@@ -718,8 +766,11 @@ void render_title(framebuf_t *fb, const render_ctx_t *c, unsigned t,
                         sw_palette[PAL_HUD_DIM], k->act);
             }
         } else if (!blink || ((t / 24) & 1)) {
-            fb_text(fb, cx - fb_text_width(sc, lines[i].text) / 2, y, sc,
-                    sw_palette[lines[i].pal], lines[i].text);
+            int x = cx - fb_text_width(sc, lines[i].text) / 2;
+            fb_text(fb, x, y, sc, sw_palette[lines[i].pal], lines[i].text);
+            if (lines[i].mark)
+                fb_text(fb, x - fb_text_width(sc, lines[i].mark), y, sc,
+                        sw_palette[lines[i].pal], lines[i].mark);
         }
         y += (7 + 3 + lines[i].gap * 3) * sc;
     }
@@ -762,11 +813,12 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
     if (ts < 1) ts = 1;
     if (ts > 4) ts = 4;
 
-    char scoreline[48], heading[48];
+    char scoreline[48], bestline[48];
     char rows[SCORE_ROWS][32];
 
     snprintf(scoreline, sizeof(scoreline), "FINAL SCORE %d", v->final_score);
-    snprintf(heading, sizeof(heading), "%s HIGH SCORES", v->board_name);
+    snprintf(bestline, sizeof(bestline), "YOUR BEST ON THIS LEVEL %d",
+             v->level_best);
     for (int i = 0; i < SCORE_ROWS; i++)
         snprintf(rows[i], sizeof(rows[i]), "%2d  %s %8d",
                  i + 1, v->table->e[i].name, v->table->e[i].score);
@@ -775,19 +827,36 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
      * what puts the editing caret under the right initial. */
     const int name_col = 4;
 
-    title_line_t lines[SCORE_ROWS + 6];
+    /* No headline means nobody just finished a run: the attract cycle on an
+     * idle title screen, which shows the board and nothing about a score. */
+    bool attract = v->headline == NULL;
+
+    title_line_t lines[SCORE_ROWS + 8];
     int n = 0;
     /* Named fields throughout: this struct is shared with the title screen
      * and gained a member once already. */
-    lines[n++] = (title_line_t){ .text = v->headline, .scale = 3,
-                                 .pal = PAL_TEAM2, .gap = 1 };
-    lines[n++] = (title_line_t){ .text = scoreline, .scale = 2,
-                                 .pal = PAL_HUD, .gap = 0 };
-    if (!v->ranked)
-        lines[n++] = (title_line_t){ .text = "NOT RANKED", .scale = 1,
-                                     .pal = PAL_HUD_DIM, .gap = 0 };
-    lines[n++] = (title_line_t){ .text = heading, .scale = 1,
-                                 .pal = PAL_TITLE2, .gap = 2 };
+    if (!attract) {
+        lines[n++] = (title_line_t){ .text = v->headline, .scale = 3,
+                                     .pal = PAL_TEAM2, .gap = 1 };
+        lines[n++] = (title_line_t){ .text = scoreline, .scale = 2,
+                                     .pal = PAL_HUD, .gap = 0 };
+        if (!v->ranked)
+            lines[n++] = (title_line_t){ .text = "NOT RANKED", .scale = 1,
+                                         .pal = PAL_HUD_DIM, .gap = 0 };
+        /* A run the boards will not take still has something to beat: what
+         * this player has managed on this level before. */
+        if (!v->ranked && v->level_best > 0)
+            lines[n++] = (title_line_t){ .text = bestline, .scale = 1,
+                                         .pal = PAL_TEAM1, .gap = 0 };
+    }
+    /* Two lines: what the page is, then whose board it is.  A mode name and
+     * "HIGH SCORES" on one line reads as a single long label. */
+    lines[n++] = (title_line_t){ .text = "HIGH SCORES",
+                                 .scale = attract ? 3 : 2,
+                                 .pal = PAL_TITLE2 };
+    lines[n++] = (title_line_t){ .text = v->board_name,
+                                 .scale = attract ? 2 : 1,
+                                 .pal = PAL_TEAM1, .gap = 2 };
 
     int first_row = n;
     for (int i = 0; i < SCORE_ROWS; i++)
@@ -797,14 +866,24 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
             .gap = i == SCORE_ROWS - 1 ? 2 : 0,
         };
 
-    if (v->edit_cell >= 0)
-        lines[n++] = (title_line_t){
-            .text = "UP DOWN LETTER PICKS    ENTER WHEN DONE",
-            .scale = 1, .pal = PAL_HUD, .gap = 0 };
+    /* Keys the way every other screen names them: key bright, what it does
+     * dim. */
+    static const control_t back_keys[] = { { "ANY KEY", "FOR THE MENU" } };
+    static const control_t entry_keys[] = {
+        { "UP DOWN", "PICKS A LETTER" }, { "ENTER", "WHEN DONE" },
+    };
+    static const control_t again_keys[] = {
+        { "ENTER", "PLAYS AGAIN" }, { "ESC", "FOR THE MENU" },
+    };
+    if (attract)
+        lines[n++] = (title_line_t){ .pair = back_keys, .n_pair = 1,
+                                     .scale = 1 };
+    else if (v->edit_cell >= 0)
+        lines[n++] = (title_line_t){ .pair = entry_keys, .n_pair = 2,
+                                     .scale = 1 };
     else
-        lines[n++] = (title_line_t){
-            .text = "ENTER TO PLAY AGAIN    ESC FOR MENU",
-            .scale = 1, .pal = PAL_HUD_DIM, .gap = 0 };
+        lines[n++] = (title_line_t){ .pair = again_keys, .n_pair = 2,
+                                     .scale = 1 };
     if (!v->saved)
         lines[n++] = (title_line_t){ .text = "SCORES NOT SAVED", .scale = 1,
                                      .pal = PAL_TEAM2, .gap = 0 };
@@ -816,9 +895,9 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
         for (int i = 0; i < n; i++) {
             total += (7 + 3 + lines[i].gap * 3) * ts * lines[i].scale;
             int sc = ts * lines[i].scale;
-            int kw[CTL_COLS], xo[CTL_COLS];
-            int w = lines[i].ctl ? ctl_layout(kw, xo) * 6 * sc
-                                 : fb_text_width(sc, lines[i].text);
+            int w = lines[i].pair
+                        ? ctl_row_width(lines[i].pair, lines[i].n_pair) * 6 * sc
+                        : fb_text_width(sc, lines[i].text);
             if (w > widest)
                 widest = w;
         }
@@ -834,7 +913,9 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
         y = 10 * ts;
     int cx = fb->w / 2;
 
-    fb_blend_rect(fb, 0, 0, fb->w, fb->h, 0xB0000000);
+    /* Plain, like the menus: the board is a page of its own, not a caption
+     * over the world. */
+    draw_sky(fb, c);
     if (c->style == RENDER_BREAKOUT)
         fb_blend_rect(fb, cx - widest / 2 - 8 * ts, y - 8 * ts,
                       widest + 16 * ts, total + 16 * ts,
@@ -842,8 +923,22 @@ void render_scores(framebuf_t *fb, const render_ctx_t *c, const scoreboard_t *v)
 
     for (int i = 0; i < n; i++) {
         int sc = ts * lines[i].scale;
+        if (lines[i].pair) {
+            int w = ctl_row_width(lines[i].pair, lines[i].n_pair) * 6 * sc;
+            ctl_row_draw(fb, cx - w / 2, y, sc,
+                         lines[i].pair, lines[i].n_pair);
+            y += (7 + 3 + lines[i].gap * 3) * sc;
+            continue;
+        }
         int x = cx - fb_text_width(sc, lines[i].text) / 2;
         fb_text(fb, x, y, sc, sw_palette[lines[i].pal], lines[i].text);
+
+        /* An entry carrying a mark gets it in the margin past the score,
+         * in the colour nothing good is ever printed in. */
+        int row = i - first_row;
+        if (row >= 0 && row < SCORE_ROWS && v->table->e[row].marked)
+            fb_text(fb, x + fb_text_width(sc, lines[i].text) + 6 * sc / 2,
+                    y, sc, sw_palette[PAL_TEAM2], "*");
 
         /* The caret sits under the initial being edited, and blinks so it is
          * obvious the board is waiting for you rather than finished. */
@@ -1139,39 +1234,115 @@ void render_edit(framebuf_t *fb, const render_ctx_t *c, const editview_t *v)
 
 /* ---- choosing a level -------------------------------------------------- */
 
+/* The list is a table with fixed columns rather than centred lines: a name
+ * in one, its author in the next, the player's best on it in the third, so
+ * each column lines up down the screen and a long name cannot shove the row
+ * it is on sideways.  Name and author are truncated to their column -- a
+ * name that does not fit is the caller's problem to shorten, not a reason to
+ * reflow the list. */
+#define PICK_NAME_W    24
+#define PICK_AUTHOR_W  14
+#define PICK_BEST_W     7    /* right-aligned, wide enough for any score  */
+#define PICK_ROW_CHARS (2 + PICK_NAME_W + 4 + PICK_AUTHOR_W + 4 + PICK_BEST_W)
+
+/* The list is a viewport of a fixed number of rows whether or not there are
+ * that many levels, so the heading, the rule under it and the keys below do
+ * not move as the directory fills up or the list scrolls.  Eight rows is
+ * what fits under the heading at the largest text size on a 1080-tall
+ * screen; past that the list scrolls rather than the layout growing. */
+#define PICK_ROWS      8
+#define PICK_GUTTER    2    /* characters kept right of the rows for marks */
+
+/* A small solid triangle, 7 by 4 at `s` pixels a cell: the mark that says
+ * the list goes on above or below what is shown.  Deliberately drawn rather
+ * than typed -- '^' and 'v' at this size read as text, not as a direction. */
+#define PICK_ARROW_W 7
+
+static void pick_arrow(framebuf_t *fb, int x, int y, int s, bool up,
+                       uint32_t col)
+{
+    for (int r = 0; r < 4; r++) {
+        int w = 1 + 2 * (up ? r : 3 - r);
+        fb_rect(fb, x + (PICK_ARROW_W - w) / 2 * s, y + r * s, w * s, s, col);
+    }
+}
+
+/* `src` left-aligned in a column exactly `w` characters wide, with a '~' in
+ * the last of them when something had to be cut, so a truncated name looks
+ * truncated rather than like a level called something else. */
+static void pick_col(char *dst, size_t n, int w, const char *src)
+{
+    snprintf(dst, n, "%-*.*s", w, w, src);
+    if ((int)strlen(src) > w)
+        dst[w - 1] = '~';
+}
+
+static void pick_row(char *dst, size_t n, bool sel, const char *name,
+                     const char *author, int best)
+{
+    char nm[PICK_NAME_W + 1], au[PICK_AUTHOR_W + 1];
+    char sc[16];
+
+    pick_col(nm, sizeof(nm), PICK_NAME_W, name);
+    pick_col(au, sizeof(au), PICK_AUTHOR_W, author ? author : "");
+    /* A level nobody has finished shows a dash rather than a nought: no
+     * score yet is not a score of nothing.  The column is as wide as any
+     * score the game can produce, so nothing is ever cut off here. */
+    if (best > 0)
+        snprintf(sc, sizeof(sc), "%*d", PICK_BEST_W, best);
+    else
+        snprintf(sc, sizeof(sc), "%*s", PICK_BEST_W, "-");
+
+    snprintf(dst, n, "%s%s    %s    %s", sel ? "> " : "  ", nm, au, sc);
+}
+
 void render_levels(framebuf_t *fb, const render_ctx_t *c,
                    const levelpick_t *v)
 {
     draw_sky(fb, c);
 
-    /* Eight rows at a time, scrolled to keep the chosen one in view: a level
-     * directory can be longer than a screen. */
-    const int window = 8;
+    /* PICK_ROWS at a time, scrolled to keep the chosen one in view: a level
+     * directory can be longer than the viewport. */
     int rows = v->n + 1;                    /* the classic map, then them  */
-    int first = v->sel - window / 2;
-    if (first > rows - window) first = rows - window;
+    int first = v->sel - PICK_ROWS / 2;
+    if (first > rows - PICK_ROWS) first = rows - PICK_ROWS;
     if (first < 0) first = 0;
-    int last = first + window;
+    int last = first + PICK_ROWS;
     if (last > rows) last = rows;
 
     /* Build the rows first, so the layout can be measured against the real
-     * text rather than against a guess at how long a level name is. */
-    char row[window][40];
-    const char *author[window];
+     * text rather than against a guess at how long a level name is.  They
+     * arrive from level_list() sorted by name. */
+    char row[PICK_ROWS][PICK_ROW_CHARS + 24];
     int n_rows = 0;
     for (int i = first; i < last; i++, n_rows++) {
         if (i == 0)
-            snprintf(row[n_rows], sizeof(row[0]), "%sTHE CLASSIC MAP",
-                     v->sel == 0 ? "> " : "  ");
+            /* Row 0 is the built-in map rather than a file, so its name and
+             * author are named here.  level_classic carries no author of its
+             * own: that would go into the canonical form and move the hash
+             * peers compare (doc/LEVEL_FORMAT.md). */
+            pick_row(row[n_rows], sizeof(row[0]), v->sel == 0,
+                     "THE CLASSIC MAP", "DAVID L. CLARK", v->best_classic);
         else
-            snprintf(row[n_rows], sizeof(row[0]), "%s%.30s",
-                     v->sel == i ? "> " : "  ", v->items[i - 1].name);
-        author[n_rows] = i > 0 && v->items[i - 1].author[0]
-                             ? v->items[i - 1].author : NULL;
+            pick_row(row[n_rows], sizeof(row[0]), v->sel == i,
+                     v->items[i - 1].name, v->items[i - 1].author,
+                     v->best ? v->best[i - 1] : 0);
     }
 
     const char *head = "CHOOSE A LEVEL";
-    const char *foot = "ENTER CHOOSES    ESC GOES BACK";
+
+    /* Names the columns the rows below are printed in, at the same
+     * character offsets pick_row() puts them. */
+    char cols[PICK_ROW_CHARS + 8];
+    snprintf(cols, sizeof(cols), "  %-*s    %-*s    %*s",
+             PICK_NAME_W, "LEVEL", PICK_AUTHOR_W, "AUTHOR",
+             PICK_BEST_W, "BEST");
+
+    /* The same key/action pairing the title screen's control block uses. */
+    static const control_t keys[] = {
+        { "ENTER", "CHOOSES" }, { "ESC", "GOES BACK" },
+    };
+    const int n_keys = (int)(sizeof(keys) / sizeof(keys[0]));
     char note[80] = "", where[600] = "", how[80] = "";
     if (v->skipped > 0)
         snprintf(note, sizeof(note), "%d FILE%s HERE WILL NOT LOAD",
@@ -1185,17 +1356,26 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
     int ts = c->scale;
     if (ts < 1) ts = 1;
     if (ts > 4) ts = 4;
-    int rowh, total, widest;
+    /* One pixel a cell smaller than the three-times heading the other
+     * screens use: still the largest thing here without towering over the
+     * list it labels. */
+    int heads;
+    int rowh, total, widest, listw;
     for (;;) {
-        rowh = 13 * ts * 2;
-        total = 10 * ts * 3 + 6 * ts + n_rows * rowh + 12 * ts + 14 * ts * 2;
-        widest = fb_text_width(ts * 3, head);
-        int fw = fb_text_width(ts * 2, foot);
+        /* One line a level now that the author shares it, at the base text
+         * size: a directory of them reads as a list rather than a stack of
+         * headlines. */
+        rowh = 11 * ts;
+        heads = ts * 3 - 1;
+        listw = (PICK_ROW_CHARS + PICK_GUTTER) * 6 * ts;
+        /* heading, gap, column names, rule and its air, the viewport, then
+         * the note and the keys. */
+        total = 10 * heads + 6 * ts + 10 * ts + 8 * ts +
+                PICK_ROWS * rowh + 12 * ts + 14 * ts;
+        widest = fb_text_width(heads, head);
+        int fw = ctl_row_width(keys, n_keys) * 6 * ts;
         if (fw > widest) widest = fw;
-        for (int i = 0; i < n_rows; i++) {
-            int w = fb_text_width(ts * 2, row[i]);
-            if (w > widest) widest = w;
-        }
+        if (listw > widest) widest = listw;
         if (where[0]) {
             int w = fb_text_width(ts, where);
             if (w > widest) widest = w;
@@ -1217,22 +1397,36 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
                       widest + 16 * ts, total + 16 * ts,
                       sw_palette[PAL_HUD_BG]);
 
-    fb_text(fb, cx - fb_text_width(ts * 3, head) / 2, y, ts * 3,
-            sw_palette[PAL_TEAM1], head);
-    y += 10 * ts * 3 + 6 * ts;
+    fb_text(fb, cx - fb_text_width(heads, head) / 2, y, heads,
+            sw_palette[PAL_TITLE2], head);
+    y += 10 * heads + 6 * ts;
 
-    for (int i = 0; i < n_rows; i++) {
-        fb_text(fb, cx - fb_text_width(ts * 2, row[i]) / 2, y, ts * 2,
+    /* Every row starts at the same x, so the markers, names and authors each
+     * form a column, and the column names sit over them. */
+    int lx = cx - listw / 2;
+    fb_text(fb, lx, y, ts, sw_palette[PAL_TEAM1], cols);
+    y += 10 * ts;
+    fb_rect(fb, lx, y + 3 * ts, listw, ts, sw_palette[PAL_HUD_DIM]);
+    y += 8 * ts;
+
+    /* The viewport is PICK_ROWS tall whether or not there are that many
+     * levels, so nothing below it moves as the list scrolls. */
+    int list_y = y;
+    for (int i = 0; i < n_rows; i++)
+        fb_text(fb, lx, list_y + i * rowh, ts,
                 sw_palette[first + i == v->sel ? PAL_HUD : PAL_HUD_DIM],
                 row[i]);
-        if (author[i]) {
-            char by[48];
-            snprintf(by, sizeof(by), "BY %.28s", author[i]);
-            fb_text(fb, cx - fb_text_width(ts, by) / 2, y + 8 * ts * 2, ts,
-                    sw_palette[PAL_HUD_DIM], by);
-        }
-        y += rowh;
-    }
+
+    /* Marks in the gutter for the rows that are there but not shown. */
+    int ax = lx + listw - PICK_ARROW_W * ts;
+    if (first > 0)
+        pick_arrow(fb, ax, list_y + 2 * ts, ts, true,
+                   sw_palette[PAL_TITLE2]);
+    if (last < rows)
+        pick_arrow(fb, ax, list_y + (PICK_ROWS - 1) * rowh + 2 * ts, ts,
+                   false, sw_palette[PAL_TITLE2]);
+
+    y = list_y + PICK_ROWS * rowh;
 
     if (where[0]) {
         fb_text(fb, cx - fb_text_width(ts, where) / 2, y, ts,
@@ -1248,6 +1442,6 @@ void render_levels(framebuf_t *fb, const render_ctx_t *c,
                 sw_palette[PAL_TEAM2], note);
     y += 12 * ts;
 
-    fb_text(fb, cx - fb_text_width(ts * 2, foot) / 2, y, ts * 2,
-            sw_palette[PAL_TEAM1], foot);
+    ctl_row_draw(fb, cx - ctl_row_width(keys, n_keys) * 6 * ts / 2, y, ts,
+                 keys, n_keys);
 }

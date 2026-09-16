@@ -36,8 +36,13 @@ static const char *const board_tag[SCORE_BOARDS] = {
  * is 2175 (1800 of enemy buildings plus the 375 clear bonus), so several of
  * these are an exact number of clean levels and mean something to beat.
  * The tenth entry sets the bar for ranking at all, and the three differ on
- * purpose -- novice welcomes a first attempt, the computer board does not. */
-static const score_entry_t defaults[SCORE_BOARDS][SCORE_ROWS] = {
+ * purpose -- novice welcomes a first attempt, the computer board does not.
+ *
+ * Name and score only: the rest of an entry is whatever a fresh one starts
+ * as, and repeating that thirty times here would only be noise. */
+typedef struct { const char *name; int score; } score_seed_t;
+
+static const score_seed_t defaults[SCORE_BOARDS][SCORE_ROWS] = {
     {   /* novice */
         { "DLC", 15225 }, { "CRH", 13050 }, { "PUP", 11300 },
         { "DHH", 10875 }, { "RRH",  8700 }, { "CAM",  7150 },
@@ -132,20 +137,30 @@ static void sort_board(score_table_t *t, int n)
     }
 }
 
+/* An entry as a fresh table holds it. */
+static score_entry_t seeded(const score_seed_t *d)
+{
+    score_entry_t e;
+    memset(&e, 0, sizeof(e));
+    set_name(e.name, d->name);
+    e.score = d->score;
+    return e;
+}
+
 /* Top up a short board from the defaults, skipping rows it already has. */
 static void pad_board(score_table_t *t, int have, int b)
 {
     for (int i = 0; i < SCORE_ROWS && have < SCORE_ROWS; i++) {
-        const score_entry_t *d = &defaults[b][i];
+        const score_seed_t *d = &defaults[b][i];
         bool dup = false;
         for (int j = 0; j < have; j++)
             if (t->e[j].score == d->score && !strcmp(t->e[j].name, d->name))
                 dup = true;
         if (!dup)
-            t->e[have++] = *d;
+            t->e[have++] = seeded(d);
     }
     while (have < SCORE_ROWS)
-        t->e[have++] = defaults[b][SCORE_ROWS - 1];
+        t->e[have++] = seeded(&defaults[b][SCORE_ROWS - 1]);
     sort_board(t, SCORE_ROWS);
 }
 
@@ -174,23 +189,82 @@ int scores_insert(scores_t *s, playmode_t mode, const char *name, int score)
         t->e[i] = t->e[i - 1];
     set_name(t->e[at].name, name);
     t->e[at].score = score;
+    t->e[at].marked = false;
 
     set_name(s->last_name, name);
     return at;
+}
+
+/* ---- one best per level ------------------------------------------------- */
+
+static int best_slot(const scores_t *s, uint32_t level)
+{
+    for (int i = 0; i < s->n_best; i++)
+        if (s->best[i].level == level)
+            return i;
+    return -1;
+}
+
+int scores_best(const scores_t *s, uint32_t level)
+{
+    if (!level)
+        return 0;
+    int at = best_slot(s, level);
+    return at < 0 ? 0 : s->best[at].score;
+}
+
+bool scores_best_set(scores_t *s, uint32_t level, int score)
+{
+    if (!level || score <= 0)
+        return false;
+
+    int at = best_slot(s, level);
+    if (at >= 0) {
+        if (score <= s->best[at].score)
+            return false;
+        s->best[at].score = score;
+    } else {
+        if (s->n_best == SCORE_BESTS) {
+            /* Full: the least recently beaten goes, which is the one at the
+             * front.  Somebody with more than SCORE_BESTS levels keeps the
+             * ones they are actually flying. */
+            memmove(s->best, s->best + 1,
+                    sizeof(s->best[0]) * (SCORE_BESTS - 1));
+            s->n_best--;
+        }
+        at = s->n_best++;
+        s->best[at].level = level;
+        s->best[at].score = score;
+    }
+
+    /* Beaten most recently, so it goes to the back of the queue. */
+    score_best_t moved = s->best[at];
+    memmove(s->best + at, s->best + at + 1,
+            sizeof(s->best[0]) * (size_t)(s->n_best - at - 1));
+    s->best[s->n_best - 1] = moved;
+    return true;
 }
 
 /* ---- persistence -------------------------------------------------------- */
 
 static void load_defaults(scores_t *s)
 {
-    memcpy(s->board, defaults, sizeof(s->board));
+    for (int b = 0; b < SCORE_BOARDS; b++)
+        for (int i = 0; i < SCORE_ROWS; i++)
+            s->board[b].e[i] = seeded(&defaults[b][i]);
+    s->n_best = 0;                    /* nobody has flown anything yet   */
     set_name(s->last_name, "AAA");
     s->dials = false;                 /* off until the player asks for it */
     s->loaded_defaults = true;
 }
 
-/* "COMPUTER DHH 64850" -- the name is three columns wide, spaces included. */
-static bool parse_entry(const char *line, int *board, char *name, int *score)
+/* "COMPUTER DHH 64850" -- the name is three columns wide, spaces included.
+ *
+ * A fourth field may follow the score.  It is the entry's flags, written as
+ * a decimal, and a line without one is a line from a build that had none:
+ * the entry reads as zero rather than as an error. */
+static bool parse_entry(const char *line, int *board, char *name, int *score,
+                        int *flags)
 {
     for (int b = 0; b < SCORE_BOARDS; b++) {
         size_t len = strlen(board_tag[b]);
@@ -213,8 +287,17 @@ static bool parse_entry(const char *line, int *board, char *name, int *score)
         if (end == p + SCORE_NAME_LEN + 1 || v <= 0 || v > 1000000000L)
             return false;
 
+        long extra = 0;
+        if (end && *end == ' ') {
+            char *tail = NULL;
+            long got = strtol(end + 1, &tail, 10);
+            if (tail != end + 1 && got >= 0 && got <= 0xFF)
+                extra = got;
+        }
+
         *board = b;
         *score = (int)v;
+        *flags = (int)extra;
         memcpy(name, n, sizeof(n));
         return true;
     }
@@ -264,13 +347,43 @@ void scores_load(scores_t *s)
             continue;
         }
 
-        int b, sc;
+        /* "BEST 3b7788af 12400" -- the level's hash and what was scored on
+         * it.  File order is queue order, oldest first. */
+        if (!strncmp(line, "BEST ", 5)) {
+            char *end = NULL;
+            unsigned long h = strtoul(line + 5, &end, 16);
+            if (!end || end == line + 5 || *end != ' ' || h > 0xFFFFFFFFUL)
+                continue;
+            char *tail = NULL;
+            long v = strtol(end + 1, &tail, 10);
+            if (tail == end + 1 || v <= 0 || v > 1000000000L)
+                continue;
+            /* Straight onto the end rather than through
+             * scores_best_set(): the file is already in order, and a
+             * duplicated hash keeps the better of the two. */
+            int at = -1;
+            for (int i = 0; i < s->n_best; i++)
+                if (s->best[i].level == (uint32_t)h)
+                    at = i;
+            if (at >= 0) {
+                if ((int)v > s->best[at].score)
+                    s->best[at].score = (int)v;
+            } else if (s->n_best < SCORE_BESTS) {
+                s->best[s->n_best].level = (uint32_t)h;
+                s->best[s->n_best].score = (int)v;
+                s->n_best++;
+            }
+            continue;
+        }
+
+        int b, sc, fl = 0;
         char name[SCORE_NAME_LEN + 1];
-        if (!parse_entry(line, &b, name, &sc))
+        if (!parse_entry(line, &b, name, &sc, &fl))
             continue;               /* unknown line: ignore, do not fail   */
         if (n[b] < SCORE_ROWS) {
             set_name(got[b].e[n[b]].name, name);
             got[b].e[n[b]].score = sc;
+            got[b].e[n[b]].marked = (fl & 1) != 0;
             n[b]++;
         }
     }
@@ -302,9 +415,18 @@ bool scores_save(const scores_t *s)
     fprintf(f, "LAST %s\n", s->last_name);
     fprintf(f, "DIALS %d\n", s->dials ? 1 : 0);
     for (int b = 0; b < SCORE_BOARDS; b++)
-        for (int i = 0; i < SCORE_ROWS; i++)
-            fprintf(f, "%s %s %d\n", board_tag[b],
-                    s->board[b].e[i].name, s->board[b].e[i].score);
+        for (int i = 0; i < SCORE_ROWS; i++) {
+            const score_entry_t *e = &s->board[b].e[i];
+            /* The fourth field is only written when there is something in
+             * it, so an ordinary board is the same file it always was. */
+            if (e->marked)
+                fprintf(f, "%s %s %d %d\n", board_tag[b], e->name,
+                        e->score, 1);
+            else
+                fprintf(f, "%s %s %d\n", board_tag[b], e->name, e->score);
+        }
+    for (int i = 0; i < s->n_best; i++)
+        fprintf(f, "BEST %08x %d\n", s->best[i].level, s->best[i].score);
 
     if (fflush(f) != 0 || ferror(f)) {
         fclose(f);

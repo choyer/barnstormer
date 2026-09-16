@@ -143,7 +143,12 @@ static void kill_object(game_t *g, object_t *ob, object_t *agent)
             (ob->hitcount += TARGHITCOUNT) <= TARGHITCOUNT * (g->gamenum + 1))
             return;
 
+        /* The wreck is neither drawn nor collidable: taking it out of the
+         * x-sorted list is what makes the second true, since everything in
+         * that list is a thing an aircraft can hit.  Nothing puts a target
+         * back into it -- only moving objects are ever re-inserted. */
         ob->state = ST_FINISHED;
+        obj_xremove(g, ob);
         sw_init_explosion(g, ob, false);
         sw_score(g, ob, ob->orient == TARGET_FUEL ? 200 : 100);
         if (ob->clr >= 1 && ob->clr <= 2 && !--g->numtarg[ob->clr - 1])
@@ -232,6 +237,7 @@ static void kill_object(game_t *g, object_t *ob, object_t *agent)
             return;
         score_penalty(g, ttype, agent, 200);
         ob->state = ST_FINISHED;
+        obj_xremove(g, ob);       /* same as a flattened building          */
         return;
 
     default:

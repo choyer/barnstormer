@@ -138,6 +138,90 @@ static int determinism(void)
     return ok ? 0 : 1;
 }
 
+/* What is destroyed stops being in the way.  A flattened building is not
+ * drawn, and for a while it was still collidable: flying through the gap it
+ * left crashed the aircraft into nothing. */
+static object_t *standing(game_t *g, objtype_t type)
+{
+    for (object_t *ob = g->top; ob; ob = ob->next) {
+        if (ob->type != type || ob->state != ST_STANDING)
+            continue;
+        if (type == OBJ_TARGET && ob->clr != 2)
+            continue;              /* an enemy building, so it can be hit */
+        if (game_ground(g, ob->x + 8) < 110)
+            return ob;             /* low, flat ground: no hillside in it */
+    }
+    return NULL;
+}
+
+/* Put the player in the air at (x, y) as an ordinary flying aircraft. */
+static void fly_at(game_t *g, int x, int y)
+{
+    object_t *p = game_player(g);
+    p->state = ST_FLYING;
+    p->athome = false;
+    p->crashcnt = 0;
+    p->hitcount = 0;
+    p->life = 100;
+    p->sprite_set = SPRITE_PLANE;
+    p->sprite_frame = 0;
+    p->symw = p->symh = 16;
+    p->x = x;
+    p->y = y;
+    obj_xremove(g, p);
+    obj_xinsert(g, p);
+}
+
+static int wreckage(void)
+{
+    printf("%-28s ", "wreckage is not solid");
+    fflush(stdout);
+    int before = failures;
+
+    game_t *g = calloc(1, sizeof(*g));
+    uint16_t keys[MAX_PLYR] = { 0 };
+
+    for (int pass = 0; pass < 2; pass++) {
+        bool ox = pass == 1;
+        game_start(g, &level_classic, PLAY_COMPUTER, 0);
+        object_t *victim = standing(g, ox ? OBJ_OX : OBJ_TARGET);
+        check(victim != NULL, "no scenery to fly into", 0);
+        if (!victim)
+            break;
+        int vx = victim->x, vy = victim->y;
+
+        /* Flying into it while it stands takes both down: that is the game
+         * working, and it is also how the wreck gets made. */
+        fly_at(g, vx, vy);
+        game_tick(g, keys);
+        check(game_player(g)->state != ST_FLYING,
+              ox ? "running an ox down left the aircraft flying"
+                 : "a standing building did not stop the aircraft", 0);
+        check(victim->state == ST_FINISHED,
+              ox ? "the ox survived being run down"
+                 : "the building survived being flown into", 0);
+
+        /* Let the explosion burn out -- it is a real thing in the air and is
+         * supposed to be lethal while it lasts. */
+        for (int i = 0; i < 60; i++)
+            game_tick(g, keys);
+
+        /* The same square of sky, now empty. */
+        fly_at(g, vx, vy);
+        game_tick(g, keys);
+        check(game_player(g)->state == ST_FLYING,
+              ox ? "a dead ox still brings an aircraft down"
+                 : "a flattened building still brings an aircraft down", 0);
+        check(game_player(g)->crashcnt == 0,
+              "flying through empty sky cost a life", 0);
+        verify(g, 0);
+    }
+    free(g);
+
+    printf("%s\n", failures == before ? "ok" : "FAILED");
+    return failures - before;
+}
+
 /* The clear-the-map counter has to come from the level, not from MAX_TARG:
  * an authored level (doc/LEVEL_FORMAT.md) may carry fewer buildings, and a
  * counter that starts above the number standing can never reach zero. */
@@ -197,6 +281,7 @@ int main(void)
     soak("flying, single g7",       PLAY_SINGLE,   7, 8000, true);
     soak("long run, vs computer",   PLAY_COMPUTER, 0, 60000, true);
     authored_levels();
+    wreckage();
     determinism();
 
     printf("%s (%d failures)\n", failures ? "FAILURES" : "all ok", failures);
