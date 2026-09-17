@@ -39,6 +39,28 @@ Against the computer, slots 1 and 6 are used as well; in networked play, 3 and
 puts enemy aircraft on your own strip — so give a map eight, four at each
 end, and the arrangement works in every mode.
 
+**Neither side is tied to an end of the world.** Slot 0 is the player's
+wherever it is: the classic map puts both fields *inland*, 450 columns
+apart, at 1270 and 1720. A mirrored map — player east flying west — plays
+the same; `game.c` sets `ob->angle = ob->orient ? ANGLES/2 : 0` and
+everything downstream works in the aeroplane's own terms. What has to hold
+is that the two fields point at each other and stand at least 450 columns
+apart.
+
+(`tests/flytest.c` used to command flaps by absolute angle, which is
+inverted for a west-facing aeroplane -- `move.c` has
+`nangle += orient ? -flaps : flaps` -- so it reported every mirrored map as
+unflyable. It now pitches in plane-relative steps. If a map ever looks
+unflyable only when mirrored, suspect the harness before the map.)
+
+**Nor does either side have to take off towards the other.** `facing=` is
+per field, so back-to-back fields work: both sides take off outwards, climb,
+loop and come back over their own field. What that costs is room — a loop is
+32–38 columns wide, and the aeroplane needs 221 columns to reach 50 above
+the field — so an outward-facing field wants **320 columns of open ground**
+between its outermost strip and the wall, and the player's tank moves to the
+strips' inner side so that it still stands between the two fields.
+
 **Strips come in twos and fours, and the classic map scatters them.** Its
 four per side are not in one place: player 1270 (slot 0), 1330, 1360 and
 **588**; enemy 1720 (slot 7), 1660, 1630 and **2456**. The outlier takes

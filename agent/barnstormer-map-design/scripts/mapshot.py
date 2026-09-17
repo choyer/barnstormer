@@ -57,7 +57,7 @@ import subprocess
 import sys
 from xml.sax.saxutils import escape
 
-VERSION = "1.6.0"              # bump when the drawing changes: it is a cache key
+VERSION = "1.7.0"              # bump when the drawing changes: it is a cache key
 MAP_FORMAT_VERSION = 1
 MAP_MAGIC = "barnstormer-map"
 MAP_MAGIC_WAS = "barnstormer-level"
@@ -492,20 +492,27 @@ def render(m, recipe=None, layout="full", scale=2, label=None):
              f'text-anchor="end">edge of the world</text>')
 
     # Airfields: the strip, the run it needs in the direction it faces, and
-    # which way that is -- the three things that decide whether it is flyable.
-    for rx, orient in sorted(m["runways"]):
+    # which way that is -- the three things that decide whether it is
+    # flyable.  Slots 0-3 are the player's and 4-7 the enemy's
+    # (game.c's slot tables), so a strip is drawn in its owner's colour: a
+    # satellite strip half a world from its own field is otherwise
+    # indistinguishable from the other side's.
+    for slot, r in enumerate(m["runways"]):
+        rx, orient = r
+        mine = slot <= 3
+        col = TEAM1 if mine else TEAM2
         pad = g[rx]
         lo = rx - CORRIDOR if orient else rx + RUNWAY_SPAN
         o.append(f'<rect x="{wx(lo)}" y="{wy(pad) - s}" '
-                 f'width="{CORRIDOR * s}" height="{2 * s}" fill="{HUD}" '
-                 f'opacity="0.22"/>')
+                 f'width="{CORRIDOR * s}" height="{2 * s}" fill="{col}" '
+                 f'opacity="0.30"/>')
         o.append(f'<rect x="{wx(rx)}" y="{wy(pad) - 3 * s}" '
-                 f'width="{RUNWAY_SPAN * s}" height="{4 * s}" fill="{HUD}"/>')
+                 f'width="{RUNWAY_SPAN * s}" height="{4 * s}" fill="{col}"/>')
         d = -1 if orient else 1
         ax = wx(rx + (0 if orient else RUNWAY_SPAN)) + d * 5 * s
         o.append(f'<polygon points="{ax + d * 13 * s},{wy(pad) + 5 * s} '
                  f'{ax},{wy(pad) + 2 * s} {ax},{wy(pad) + 8 * s}" '
-                 f'fill="{HUD}" opacity="0.85"/>')
+                 f'fill="{col}" opacity="0.9"/>')
 
     # Buildings and cattle are the game's own sprites, drawn where the game
     # draws them: 16x16 with row 0 at the top, standing on the levelled pad.
@@ -571,11 +578,15 @@ def render(m, recipe=None, layout="full", scale=2, label=None):
     # sprite item carries its kind and its count separately: the count is
     # the number being read off, so it is drawn in the HUD white while the
     # word stays dim.
-    items = [("strip", None, "airfield", None)]
+    items = []
     if m["oxen"]:                           # a map without cattle says nothing
         items.append(("sprite", (SPRITE_OX[0], False), "ox", len(m["oxen"])))
-    for kinds, enemy, who in ((mine, False, "Player:"),
-                              (theirs, True, "Enemy:")):
+    for kinds, enemy, who, slots in (
+            (mine, False, "Player:", range(0, 4)),
+            (theirs, True, "Enemy:", range(4, 8))):
+        fields = len({x for slot, (x, _o) in enumerate(m["runways"])
+                      if slot in slots})
+        items.append(("strip", TEAM2 if enemy else TEAM1, "strips", fields))
         for kind in (3, 2, 1, 0):
             n = kinds.count(kind)
             if n:
@@ -600,7 +611,7 @@ def render(m, recipe=None, layout="full", scale=2, label=None):
             if what == "strip":
                 o.append(f'<rect x="{lx}" y="{yy - 5 * ls}" '
                          f'width="{TARGET_WIDTH * ls}" height="{2 * ls}" '
-                         f'fill="{HUD}"/>')
+                         f'fill="{swatch}"/>')
             else:
                 frame, enemy = swatch
                 o.append(blit_at(frame, lx, yy - 16 * ls, ls, enemy))

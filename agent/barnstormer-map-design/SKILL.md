@@ -1,7 +1,7 @@
 ---
 id: barnstormer-map-design
 name: barnstormer-map-design
-version: 1.7.0
+version: 1.10.0
 description: Design and generate Barnstormer map files (.map) from a text recipe - terrain, airfields, buildings and cattle. Use when asked to make, generate, design or fix a map, landscape or terrain for Barnstormer/Sopwith, or when editing a .map or .recipe file. Handles the file format, the placement rules the game does not document, and checking that what comes out can actually be flown.
 entrypoint: SKILL.md
 manifest: manifest.json
@@ -177,6 +177,11 @@ what the aeroplane can do. The eight that matter most:
    an airfield. Five buildings are therefore already placed, all three of
    the player's among them, so a recipe writes no `owner=player` line and
    asks only for the enemy's.
+   Every **satellite** strip gets its own hangar too, 30 columns behind it
+   and owned by the enemy — a strip in an empty field is a parked
+   aeroplane, not an airfield, and the classic map puts a building 49 and
+   66 columns behind its two outliers. With `spread=dispersed` on both
+   sides that is seven buildings placed for you.
 2. **The home strip keeps 170 columns clear; a reserve keeps 80.** An
    aeroplane needs 103 columns to leave the ground and 137 to climb over
    building height, and a hillside or a building inside the run is a wall at
@@ -188,6 +193,14 @@ what the aeroplane can do. The eight that matter most:
    the field** in slot 1 or 6, as the classic map does, so the second
    aeroplane of each side takes off from a second airfield and an attack can
    come from either direction.
+   Neither side is tied to an end, either: `field player at=2560
+   facing=left` puts the player east and flies west, and both fields inland
+   450 columns apart is what the classic map does. The generator refuses
+   only what cannot work: fields closer than 450 columns together.
+   And `facing=` is per field: back-to-back fields, both taking off
+   outwards and looping back, are a real configuration. They need 320
+   columns of open ground on the outward side — the generator refuses less
+   and notes rising ground in the climb-out.
 3. **The order of the buildings decides whose they are.** The game gives the
    player exactly the buildings at index 7, 8 and 9. `mapgen.py` emits them
    in the right order from `owner=`; if you write a `.map` by hand, you must
@@ -222,7 +235,11 @@ what the aeroplane can do. The eight that matter most:
    the odd pair with **120 columns of open ground** between groups; the
    classic map's median gap is **111**, and `mapgen.py` reports yours next
    to it and complains under half of it. Fewer buildings, further apart,
-   over more interesting ground.
+   over more interesting ground — but spread over the whole world, not
+   heaped between the fields. Past **500 columns** with nothing on them the
+   generator says so, because a stretch with nothing to fly to is scenery;
+   the classic map's emptiest run is 260, and it has something within 100
+   columns of every strip it has.
 
 ## Making terrain that is worth flying
 

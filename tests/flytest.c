@@ -28,8 +28,16 @@
 #define FLIGHT_TICKS 1500
 
 /* Full throttle; rotate at flying speed; climb hard until there is room, then
- * keep the nose a margin above the ground ahead. */
-static uint16_t scripted(game_t *g, object_t *p)
+ * keep the nose a margin above the ground ahead.
+ *
+ * Everything here is in the aeroplane's own terms rather than in compass
+ * angles, because a map may put the player's field at either end of the
+ * world, or in the middle, facing either way.  `base` is the heading it
+ * started on -- 0 taking off east, ANGLES/2 west -- and `pitch` is how many
+ * steps its nose is above that.  The flaps work the same way round
+ * (move.c: `nangle += orient ? -flaps : flaps`), so K_FLAPU always raises
+ * the nose whichever way the aeroplane points. */
+static uint16_t scripted(game_t *g, object_t *p, int base)
 {
     uint16_t k = K_ACCEL;
     int gh = game_ground(g, p->x);
@@ -50,9 +58,15 @@ static uint16_t scripted(game_t *g, object_t *p)
             want = 0;
     }
 
-    if (want >= 0 && p->angle != want) {
-        int up = (want - p->angle + ANGLES) % ANGLES;
-        k |= (up <= ANGLES / 2) ? K_FLAPU : K_FLAPD;
+    if (want >= 0) {
+        int pitch = base ? base - p->angle : p->angle - base;
+        pitch = (pitch + ANGLES) % ANGLES;
+        if (pitch > ANGLES / 2)
+            pitch -= ANGLES;            /* nose below the horizon           */
+        if (pitch < want)
+            k |= K_FLAPU;
+        else if (pitch > want)
+            k |= K_FLAPD;
     }
     return k;
 }
@@ -64,6 +78,12 @@ static bool fly(const map_t *lv, const char *path)
      * autopilot is the thing being asked whether it can use them. */
     game_start(g, lv, PLAY_COMPUTER, 0);
     object_t *me = game_player(g);
+
+    /* Which way the player's field points: a map may put it at either end,
+     * or in the middle, so the scripted pilot is told where its nose began
+     * rather than assuming east. */
+    int base = (me->angle > ANGLES / 4 && me->angle < 3 * ANGLES / 4)
+                   ? ANGLES / 2 : 0;
 
     struct flight { object_t *ob; int from, climbed, ranged; };
     struct flight plane[MAX_PLYR];
@@ -78,7 +98,7 @@ static bool fly(const map_t *lv, const char *path)
 
     for (int t = 0; t < FLIGHT_TICKS && !g->over; t++) {
         uint16_t keys[MAX_PLYR] = { 0 };
-        keys[g->player] = scripted(g, me);
+        keys[g->player] = scripted(g, me, base);
         game_tick(g, keys);
 
         for (int i = 0; i < n; i++) {

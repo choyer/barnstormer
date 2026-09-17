@@ -27,7 +27,7 @@ import os
 import re
 import sys
 
-VERSION = "1.7.0"          # this skill's version; see ../manifest.json
+VERSION = "1.10.0"          # this skill's version; see ../manifest.json
 MAP_FORMAT_VERSION = 1     # what the generated file declares in its header
 
 MAX_X, MAX_Y = 3000, 200
@@ -47,6 +47,8 @@ EDGE_WIDTH = 140           # the wall at each end of the world
 EDGE_PEAK = 186            # high enough that it reads as the end, not a hill
 FREE_AIR = 130             # ground above this leaves no room to turn round
 WALL = 160                 # ground above this is a wall, not scenery
+TAKEOFF_HEIGHT = 221       # columns before it is 50 above the field
+TURN_ROOM = 320            # take off away from the war: climb, loop, come back
 
 # Every airfield gets the classic map's own pair of buildings, behind the
 # home strip: a hangar 30 columns back and a fuel dump 60 back.  In the
@@ -65,6 +67,7 @@ FIELD_FUEL_BACK = 60       # the fuel dump, behind that
 RESERVE_RUN = 80           # clear ground a reserve strip keeps in front
 SPREAD_NEAR = (60, 90)     # classic: player 1330/1360 off 1270
 SPREAD_FAR = 700           # classic: player 588 and enemy 2456, ~700 back
+FIELDS_APART = 450         # classic: player 1270, enemy 1720
 
 # Cattle.  The classic map's own clearances: its oxen stand 48 and 42
 # columns from the nearest building and 232 columns apart.
@@ -84,6 +87,8 @@ OX_PENALTY = 200           # what killing one costs (game/collision.c)
 MIN_TARGETS = 10
 ENEMY_MIN = 7              # so the player's three land on 7, 8 and 9
 CLASSIC_MEDIAN_GAP = 111   # measured on the classic map
+CLASSIC_EMPTY_STRETCH = 260  # the classic map's emptiest run of world
+EMPTY_STRETCH = 500         # past this, a stretch with nothing in it is a note
 CLUSTER_PITCH = 24         # inside a group: 16 wide plus this, plus 0..23
 CLUSTER_APART = 120        # open ground between groups
 
@@ -330,9 +335,24 @@ def place_fields(ground, fields):
         if who not in ends:
             raise Fail(f"there is no {who} field; a map needs both")
 
+    # Either side may be at either end or in the middle, and each may face
+    # the other or away from it.  Facing away is a real configuration --
+    # everybody takes off outwards, climbs, loops and comes back over their
+    # own field -- and the only thing it needs is room to do that, which is
+    # checked per field below.  What cannot work is two fields on top of
+    # each other.
+    pat, _pface, _ = ends["player"]
+    eat, _eface, _ = ends["enemy"]
+    if abs(pat - eat) < FIELDS_APART:
+        raise Fail(f"the two fields are {abs(pat - eat)} columns apart; they "
+                   f"need {FIELDS_APART} so that neither take-off run lands "
+                   f"on the other's field (the classic map leaves 450)")
+    toward = {"player": 1 if eat > pat else -1,
+              "enemy": 1 if pat > eat else -1}
+
     orig = list(ground)
     runways = [None] * MAX_RUNWAYS
-    runs, tanks = {}, {}
+    runs, tanks, outward, satellites = {}, {}, {}, []
 
     for who in ("player", "enemy"):
         at, facing, spread = ends[who]
@@ -366,20 +386,36 @@ def place_fields(ground, fields):
                            f"{EDGE_WIDTH + room} and "
                            f"{MAX_X - EDGE_WIDTH - room}")
 
+        # A field that takes off away from the enemy has to have room to
+        # climb, loop and come back: 221 columns to reach 50 above the
+        # field, a loop 38 wide, and a margin.  Facing the enemy there is a
+        # whole map ahead; facing the wall there may be nothing.
+        if out != toward[who]:
+            far = max(xs) + RUNWAY_SPAN if out > 0 else min(xs)
+            room = (MAX_X - EDGE_WIDTH - far) if out > 0 else (far - EDGE_WIDTH)
+            if room < TURN_ROOM:
+                raise Fail(f"the {who} field at {at} faces {facing}, away "
+                           f"from the other field, with only {room} columns "
+                           f"between its outermost strip and the wall at the "
+                           f"end of the world. Taking off away needs "
+                           f"{TURN_ROOM}: {TAKEOFF_HEIGHT} columns to reach "
+                           f"50 above the field, a loop about 38 wide to turn "
+                           f"round, and somewhere to put the nose down. Move "
+                           f"the field inland")
+
         # Strips that stand together share one pad; a strip on its own gets
         # its own.  Flattening everything between a dispersed outlier and
         # the home cluster would level 700 columns of landscape to give two
         # aeroplanes somewhere to park.
-        groups, cur = [], [layout[0]]
-        for item in sorted(layout, key=lambda t: t[1])[1:]:
-            near = sorted(cur, key=lambda t: t[1])
-            if item[1] - (near[-1][1] + RUNWAY_SPAN) <= 200:
+        ordered_strips = sorted(layout, key=lambda t: t[1])
+        groups, cur = [], [ordered_strips[0]]
+        for item in ordered_strips[1:]:
+            if item[1] - (cur[-1][1] + RUNWAY_SPAN) <= 200:
                 cur.append(item)
             else:
                 groups.append(cur)
                 cur = [item]
         groups.append(cur)
-        groups = [sorted(gp, key=lambda t: t[1]) for gp in groups]
 
         # Where every take-off run ends, which is where the player's tank
         # stands: past all of them, whichever strip is furthest along.
@@ -388,19 +424,39 @@ def place_fields(ground, fields):
                  for _slot, x, home in layout]
         run_end = max(stops) if out > 0 else min(stops)
 
+        # The player's tank is a defensive unit, so it stands between its own
+        # field and the enemy's whichever way the field faces: just past the
+        # take-off runs when the field faces the enemy, and on the enemy's
+        # side of the strips when it faces away.
         tank = None
         if who == "player":
-            tank = run_end + 1 if out > 0 else run_end - TARGET_WIDTH - 1
+            if out == toward[who]:
+                tank = run_end + 1 if out > 0 else run_end - TARGET_WIDTH - 1
+            else:
+                tank = (at + toward[who] * CORRIDOR
+                        - (TARGET_WIDTH if toward[who] < 0 else 0))
         if tank is not None and not (
                 EDGE_WIDTH <= tank and tank + TARGET_WIDTH <= MAX_X - EDGE_WIDTH):
             raise Fail(f"the player field at {at} leaves no room for its tank "
-                       f"at {tank}: it stands just past the far end of every "
-                       f"take-off run, facing the enemy. Move the field back "
-                       f"from the end of the world")
+                       f"at {tank}: it stands between its own field and the "
+                       f"enemy's. Move the field further from the end of the "
+                       f"world")
 
         back = FIELD_FUEL_BACK + TARGET_WIDTH + 8
         for gp in groups:
             has_home = any(home for _slot, _x, home in gp)
+            satellite = None
+            if not has_home:
+                # A strip on its own is still an airfield, and an airfield
+                # has a hangar: behind the strip, the way the home field's
+                # is.  The classic map does the same -- a building 49
+                # columns behind its outlier at 588 and 66 behind the one at
+                # 2456.
+                nose = (min(x for _slot, x, _home in gp) if out > 0
+                        else max(x for _slot, x, _home in gp))
+                satellite = (nose - FIELD_HANGAR_BACK if out > 0
+                             else nose + FIELD_HANGAR_BACK)
+                satellites.append((who, satellite))
             gxs = [x for _slot, x, _home in gp]
             lo, hi = min(gxs) - 8, max(gxs) + RUNWAY_SPAN + 8
             span = [orig[i] for i in range(max(0, lo), min(MAX_X, hi))]
@@ -419,12 +475,14 @@ def place_fields(ground, fields):
             if has_home:                    # the airfield proper
                 if out > 0:
                     flat_lo = min(flat_lo, at - back)
-                    if tank is not None:
-                        flat_hi = max(flat_hi, tank + TARGET_WIDTH + 8)
                 else:
                     flat_hi = max(flat_hi, at + back)
-                    if tank is not None:
-                        flat_lo = min(flat_lo, tank - 8)
+                if tank is not None:        # on whichever side it stands
+                    flat_lo = min(flat_lo, tank - 8)
+                    flat_hi = max(flat_hi, tank + TARGET_WIDTH + 8)
+            if satellite is not None:       # the strip's own hangar
+                flat_lo = min(flat_lo, satellite - 8)
+                flat_hi = max(flat_hi, satellite + TARGET_WIDTH + 8)
 
             for i in range(max(0, flat_lo), min(MAX_X, flat_hi)):
                 ground[i] = pad
@@ -438,10 +496,11 @@ def place_fields(ground, fields):
         for slot, x, home in layout:
             runways[slot] = (x, orient)
             runs[slot] = strip_run(home)
+            outward[slot] = out != toward[who]
         if tank is not None:
             tanks[who] = tank
 
-    return runways, ends, runs, tanks
+    return runways, ends, runs, tanks, outward, satellites
 
 
 # ---- buildings and cattle ------------------------------------------------
@@ -507,7 +566,7 @@ def field_buildings(at, facing):
     return (at + back * FIELD_HANGAR_BACK, at + back * FIELD_FUEL_BACK)
 
 
-def place_buildings(groups, singles, runways, ends, runs, tanks):
+def place_buildings(groups, singles, runways, ends, runs, tanks, satellites):
     """Space each group out, keeping clear of the strips and the ends.
 
     Every airfield brings its own hangar and fuel dump, and the player's
@@ -555,6 +614,14 @@ def place_buildings(groups, singles, runways, ends, runs, tanks):
     # goes was worked out with the field, since the flat had to reach it.
     out["player"].append((tanks["player"], KINDS["tank"]))
     reserved[tanks["player"]] = "the player's tank"
+
+    # Every satellite strip's hangar.  They are the enemy's: the player owns
+    # exactly three buildings and its own field carries all of them, which is
+    # how the classic map has it too -- the buildings flanking its outlier
+    # strip at 588 are enemy property.
+    for who, sx in satellites:
+        out["enemy"].append((sx, KINDS["hangar"]))
+        reserved[sx] = f"the hangar at the {who}'s satellite strip"
 
     for n, o in singles:
         owner = o.get("owner")
@@ -791,6 +858,23 @@ def profile(ground, runways, targets, oxen, width=96, height=16):
     return "\n".join(out)
 
 
+def empty_stretch(targets):
+    """The longest run of world with no building on it: (from, to, columns).
+
+    Measured between the walls, so the two ends count: a map whose buildings
+    are all in the middle has two empty stretches, not none.
+    """
+    if not targets:
+        return (EDGE_WIDTH, MAX_X - EDGE_WIDTH, MAX_X - 2 * EDGE_WIDTH)
+    xs = sorted(x for x, _kind in targets)
+    runs = [(EDGE_WIDTH, xs[0], xs[0] - EDGE_WIDTH)]
+    runs += [(a + TARGET_WIDTH, b, b - (a + TARGET_WIDTH))
+             for a, b in zip(xs, xs[1:])]
+    runs.append((xs[-1] + TARGET_WIDTH, MAX_X - EDGE_WIDTH,
+                 MAX_X - EDGE_WIDTH - (xs[-1] + TARGET_WIDTH)))
+    return max(runs, key=lambda r: r[2])
+
+
 def median_gap(targets):
     """Open ground between one building and the next, as the map reads it.
 
@@ -812,7 +896,7 @@ def relief(ground):
     return max(inland) - min(inland), round(sd, 1)
 
 
-def lint(ground, runways, runs, targets, oxen):
+def lint(ground, runways, runs, outward, targets, oxen):
     """Things that load and fly but make a poor map."""
     say = []
 
@@ -846,6 +930,18 @@ def lint(ground, runways, runs, targets, oxen):
                            f"columns ahead; it keeps {want} clear, and an "
                            f"aeroplane needs {TAKEOFF_RUN} to get airborne")
                 break
+
+        # A strip facing away from the other field has to climb and turn out
+        # there, so the ground beyond its run matters as well.
+        if outward[slot]:
+            rise = max((ground[x + step * d] for d in range(want, TURN_ROOM)
+                        if 0 <= x + step * d < MAX_X), default=pad) - pad
+            if rise > 40:
+                say.append(f"runway {slot + 1} at {x} takes off away from the "
+                           f"other field, and the ground out that way rises "
+                           f"{rise} above it within {TURN_ROOM} columns; that "
+                           f"is where the aeroplane has to climb and loop "
+                           f"round, so keep it open")
 
     for x, _ in targets:
         for slot, r in enumerate(runways):
@@ -890,6 +986,19 @@ def lint(ground, runways, runs, targets, oxen):
                    f"the from=/to= band or ask for fewer -- terrain is what "
                    f"makes a map, and {len(targets)} buildings in a huddle "
                    f"read as one target")
+
+    # And the other way round: a long stretch of world with nothing in it.
+    # The classic map's emptiest run is 260 columns, and it has something
+    # within 100 columns of every one of its strips, satellite fields
+    # included.  A quarter of the world with nothing to fly to reads as
+    # scenery rather than as somewhere there is a war on.
+    empty = empty_stretch(targets)
+    if empty and empty[2] > EMPTY_STRETCH:
+        say.append(f"nothing stands between column {empty[0]} and {empty[1]} "
+                   f"-- {empty[2]} columns of the world, and the classic "
+                   f"map's emptiest run is {CLASSIC_EMPTY_STRETCH}. Put a "
+                   f"group of buildings out there, or move a field into it: "
+                   f"a stretch with nothing to fly to is scenery")
     return say
 
 
@@ -914,9 +1023,11 @@ def main():
         rec = parse(args.recipe)
         rng = Rng(rec["seed"])
         ground = build_terrain(rec["land"], rng)
-        runways, ends, strip_runs, tanks = place_fields(ground, rec["fields"])
+        runways, ends, strip_runs, tanks, outward, satellites = place_fields(
+            ground, rec["fields"])
         targets, n_player = place_buildings(rec["buildings"], rec["singles"],
-                                            runways, ends, strip_runs, tanks)
+                                            runways, ends, strip_runs, tanks,
+                                            satellites)
         oxen, ox_notes = place_oxen(ground, rec["oxen"], targets, runways)
     except Fail as e:
         if args.json:
@@ -928,7 +1039,7 @@ def main():
 
     out = args.out or os.path.splitext(args.recipe)[0] + ".map"
     runs = write_map(out, rec, ground, runways, targets, oxen)
-    notes = ox_notes + lint(ground, runways, strip_runs, targets, oxen)
+    notes = ox_notes + lint(ground, runways, strip_runs, outward, targets, oxen)
 
     if args.json:
         _json.dump({

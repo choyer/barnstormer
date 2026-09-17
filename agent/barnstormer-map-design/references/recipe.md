@@ -80,6 +80,74 @@ positional and index eight slots; laying 0–3 at the player's end and 4–7 at
 the enemy's means every mode puts friends at one end and enemies at the
 other.
 
+### Which side, and where
+
+**Neither side is tied to an end.** The player may be on the left, on the
+right, or in the middle; the only rules are that the two fields **point at
+each other** and stand at least **450 columns apart** (the classic map's own
+figure). Both are checked, with the arithmetic in the message.
+
+```
+field player at=420  facing=right      # the usual: player west, enemy east
+field enemy  at=2580 facing=left
+
+field player at=2560 facing=left       # mirrored: player east
+field enemy  at=420  facing=right
+
+field player at=1270 facing=right      # what the classic map does: both
+field enemy  at=1720 facing=left       # fields mid-map, 450 apart, and the
+                                       # buildings spread to either side
+```
+
+The classic arrangement is worth trying: with both fields inland the works
+run off both ways from the middle, the flight home is short, and the map
+does not read as two ends with a journey between them. Mind the arithmetic
+that follows from `at=`, though — the hangar and fuel dump go behind the
+home strip, the player's tank in front of it, and with `spread=dispersed`
+one strip 700 columns behind — so an inland field needs room on both sides.
+
+### Which way they take off
+
+`facing=` is set per field, so the two are independent. All of these work:
+
+| Configuration | Recipe | Plays as |
+|---|---|---|
+| **towards each other** (default) | player `facing=right`, enemy `facing=left`, player west | take off and you are pointed at the war |
+| **away from each other** | player at 900 `facing=left`, enemy at 2100 `facing=right` | everybody takes off outwards, climbs, loops and comes back over their own field; the fight is in the middle and the first minute is a join-up |
+| **one way** | both `facing=right` | one side takes off into the fight, the other has to turn round first — lopsided on purpose |
+
+A field that takes off **away** from the other needs room out there: at
+least **320 columns** between its outermost strip and the wall (221 to reach
+50 above the field, a loop about 38 wide, and somewhere to put the nose
+down), and that ground wants to be open. Both are checked — the room is
+refused outright, and rising ground in the climb-out is a note:
+
+```
+note: runway 4 at 1090 takes off away from the other field, and the ground
+      out that way rises 43 above it within 320 columns; that is where the
+      aeroplane has to climb and loop round, so keep it open
+```
+
+So a back-to-back map wants its fields inland, its outer thirds gentle, and
+its terrain and buildings in the middle where both sides converge. The
+player's tank follows the rule rather than the facing: it always stands
+between its own field and the enemy's, which for an outward-facing field
+means behind the strips instead of in front of them.
+
+### Every strip is an airfield
+
+A satellite strip gets **its own hangar**, 30 columns behind it, placed for
+you — a strip in an empty field is a parked aeroplane, not an airfield. The
+classic map does the same: a building 49 columns behind its outlier at 588
+and 66 behind the one at 2456. Those hangars belong to the **enemy** even
+when the strip is the player's, because the player owns exactly three
+buildings and its own field carries all of them — which is how the classic
+map has it too.
+
+So the buildings placed for you are: each field's hangar and fuel dump, the
+player's tank, and one hangar per satellite strip. With `spread=dispersed`
+on both sides that is **seven**, and a recipe asks for the rest.
+
 ### `spread=` — where those four go
 
 | `spread=` | Layout | Reads as |
@@ -187,6 +255,25 @@ and 9, so there must be at least seven enemy buildings ahead of them or the
 game hands some of the player's own to the enemy. Twenty is the fixed array
 in `game_t`. Anything outside that is refused with the arithmetic spelled
 out.
+
+**And put them where the aeroplanes go.** A long stretch of world with
+nothing on it is scenery: there is no reason to fly there and nothing
+happens when you do. The classic map's emptiest run is **260 columns**, and
+it has something within 100 columns of every one of its strips. Past **500
+columns** of nothing the generator says so:
+
+```
+note: nothing stands between column 306 and 960 -- 654 columns of the
+      world, and the classic map's emptiest run is 260. Put a group of
+      buildings out there, or move a field into it: a stretch with nothing
+      to fly to is scenery
+```
+
+It is a guideline, not a rule — a map whose point is emptiness may take the
+note and keep it — but the usual answer is a second `buildings` group in
+that stretch. It is what makes the far side of a satellite strip worth
+visiting, and it is why the classic map's buildings run from 191 to 2763
+rather than clustering between the fields.
 
 **Terrain is what makes a map.** A pilot remembers a pass, a bowl or a ridge
 they came over with the sun behind them; nobody remembers the fourteenth
