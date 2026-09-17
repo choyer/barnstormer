@@ -177,7 +177,7 @@ int main(void)
     /* ---- placing ---- */
 
     editor_new(&ed, path);
-    use(ED_TARGET, TARGET_HOUSE);
+    use(ED_TARGET, TARGET_HANGAR);
     at(1000, 10);
     ok("a building lands centred on the cursor",
        editor_place(&ed) == 0 &&
@@ -224,7 +224,7 @@ int main(void)
     /* ---- erasing ---- */
 
     editor_new(&ed, path);
-    use(ED_TARGET, TARGET_HOUSE);
+    use(ED_TARGET, TARGET_HANGAR);
     int xs[3] = { 1000, 1100, 1200 };
     for (int i = 0; i < 3; i++) {
         at(xs[i], 5);
@@ -250,7 +250,7 @@ int main(void)
     /* ---- moving something already placed ---- */
 
     editor_new(&ed, path);
-    use(ED_TARGET, TARGET_HOUSE);
+    use(ED_TARGET, TARGET_HANGAR);
     for (int i = 0; i < 3; i++) {
         at(1000 + i * 100, 5);
         editor_place(&ed);

@@ -1,6 +1,6 @@
 {
   "id": "barnstormer-map-design",
-  "version": "1.0.0",
+  "version": "1.6.0",
   "kind": "skill",
   "summary": "Design and generate Barnstormer map files (.map) from a text recipe: terrain, airfields, buildings and cattle, with the placement rules the game enforces but does not document.",
   "use_when": [
@@ -29,6 +29,13 @@
       "purpose": "is it a valid map, and can it be flown out of",
       "machine_readable": "add --json",
       "exit_codes": { "0": "valid and flyable", "1": "invalid or unflyable", "2": "the game binaries could not be found" }
+    },
+    {
+      "name": "mapshot",
+      "run": "python3 scripts/mapshot.py OUT.map [--layout full|map] [--format svg|png]",
+      "purpose": "draw the whole 3000-column world as one picture, in the game's palette and with the game's own building and ox sprites, optionally with the map's name, hash and recipe under it",
+      "notes": "pure stdlib for svg; png needs rsvg-convert or magick. Stateless and deterministic, so output can be cached on (hash, layout, scale, version). Computes the map hash itself, without the game binary.",
+      "exit_codes": { "0": "drawn", "1": "the map is not usable", "2": "usage", "3": "png was asked for and there is no rasteriser" }
     }
   ],
   "requires": {

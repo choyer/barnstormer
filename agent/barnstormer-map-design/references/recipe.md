@@ -17,8 +17,7 @@ land plain   width=940 h=48
 field player at=420  facing=right
 field enemy  at=2580 facing=left
 
-buildings owner=player from=80   to=300  count=3  kinds=house,factory
-buildings owner=enemy  from=1180 to=2200 count=17 kinds=factory,fuel,hangar
+buildings owner=enemy  from=980  to=2300 count=9  kinds=factory,fuel,tank
 
 ox at=1500
 ox at=1560
@@ -78,23 +77,55 @@ beyond. Four because the game's spawn tables are positional and index up to
 eight slots; laying 0–3 at the player's end and 4–7 at the enemy's means every
 mode puts friends at one end and enemies at the other.
 
-Leave room: `at=` plus about 300 columns of your own end of the map.
+Every field also comes with **its own hangar and fuel dump**, placed for you
+behind the home strip exactly as the classic map places them: the hangar 30
+columns back and the fuel dump 60, on the field's own flat, owned by the side
+whose field it is. An airfield in this game is not a bare strip, and getting
+that wrong is not something a recipe should be able to do. The flat is
+extended backwards to carry them.
+
+The player's field also comes with **its tank**, placed 170 columns beyond
+the last strip on the enemy's side of the field — a defensive unit covering
+the approach, which is what the player's third building is for. The classic
+map does the same: field at 1270 facing right, third player building at
+1440.
+
+So **all three of the player's buildings are placed for you**, and two of
+the enemy's. A recipe asks only for the enemy's remainder — `count=5` to
+`count=15` depending on how busy the map should be (see *How many* below).
+An `owner=player` line is refused: there is nothing left for it to place.
+
+Leave room: `at=` plus about 300 columns of your own end of the map, and at
+least 76 columns behind the home strip for the hangar and the fuel dump —
+which means a right-facing field at 216 or more, and a left-facing one at
+2784 or less.
 
 ## `buildings` — what there is to bomb
 
 ```
-buildings owner=enemy from=1180 to=2200 count=17 kinds=factory,fuel,hangar
+buildings owner=enemy from=980 to=2300 count=9 kinds=factory,fuel,tank
 ```
 
 `owner=` is `player` or `enemy`, `from=`/`to=` is the band they are spread
-across, `count=` how many, and `kinds=` a list cycled through: `house`,
-`factory`, `fuel` (worth 200 and explodes harder), `hangar`.
+across, `count=` how many, and `kinds=` a list cycled through:
 
-They are placed in **clusters of two to four with open ground between**, not
-at an even spacing: a row of evenly spaced structures reads as fence posts,
-and leaves a pilot nowhere to turn round between passes. Give a group room
-for that — roughly 70 columns per cluster on top of the buildings themselves,
-and the generator will say how much it wants if there is not enough.
+| Word | Kind | What it looks like |
+|---|---|---|
+| `hangar` | 0 | flagged shed with an open front — the one both airfields get |
+| `factory` | 1 | windowed block with twin chimneys |
+| `fuel` | 2 | drum on legs; worth 200 instead of 100 and explodes harder |
+| `tank` | 3 | turret and a gun over tracks |
+
+A word that is not one of those four is refused, rather than quietly
+skipped.
+
+They are placed as **singles and the occasional pair, with open ground
+between** — which is what the classic map does: twenty buildings from 191 to
+2763, a median gap of **111 columns**, and no gap under 69 except its two
+airfield pairs. A row of closely spaced structures reads as fence posts and
+leaves a pilot nowhere to turn round between passes. The generator wants
+**120 columns** of open ground per group and says how much it needs if the
+band is too narrow.
 
 For one building exactly where you want it:
 
@@ -102,18 +133,43 @@ For one building exactly where you want it:
 building owner=enemy at=1820 kind=fuel
 ```
 
-A map holds **20 buildings**, and **three of them are the player's** — the
-game decides that by position, and the generator arranges the file so your
-`owner=player` group lands in those positions. Ask for three.
+### How many
+
+**Three are always the player's** — the game decides that by position, and
+the generator arranges the file so the player's land on index 7, 8 and 9.
+All three come with its airfield: hangar, fuel dump, tank. A recipe writes
+no `owner=player` line at all.
+
+For the enemy the range is real, and most maps should not be near the top of
+it:
+
+| Buildings | Enemy `count=` | Reads as |
+|---|---|---|
+| 10 (the floor) | 5 | a landscape with something in it |
+| 12–15 | 7–10 | the usual: a few installations worth a sortie each |
+| 20 (the ceiling) | 15 | the classic map, and only if the terrain earns it |
+
+Ten is arithmetic, not taste: the player's three have to land on index 7, 8
+and 9, so there must be at least seven enemy buildings ahead of them or the
+game hands some of the player's own to the enemy. Twenty is the fixed array
+in `game_t`. Anything outside that is refused with the arithmetic spelled
+out.
+
+**Terrain is what makes a map.** A pilot remembers a pass, a bowl or a ridge
+they came over with the sun behind them; nobody remembers the fourteenth
+factory. If the generator says the median gap is well under the classic's
+111, the answer is usually fewer buildings rather than a wider band.
 
 Keep everything between columns **140 and 2860**; inside that is the wall at
 the end of the world.
 
-Buildings need 24 columns each, must not sit on a strip, and must not be in
-the 170 columns in front of one. The generator refuses and tells you where to
-put them instead.
+Buildings need 24 columns each, must not sit on a strip, must not be in the
+170 columns in front of one, and must not land on the columns a field keeps
+for its own hangar, fuel dump and tank. The generator refuses and tells you
+where to put them instead.
 
-Put the player's own buildings *behind* their field, as the classic map does.
+The player's tank stands *in front* of its field, towards the enemy — it is
+the one building on the map that is meant to be in the way.
 
 ## `ox` — cattle
 
@@ -123,3 +179,27 @@ ox at=1500
 
 At most two, and worth having: they are the only thing in the game that is
 nobody's enemy. The height is worked out from the ground under them.
+
+**They need room.** Killing an ox costs 200 points, and a bullet or a bomb
+kills it outright — only the blast itself spares it. An ox standing against
+a building turns that building into a trap: there is no way to bomb it
+without risking the fine, and a pilot cannot see far enough ahead to plan
+around it.
+
+So `at=` is a request, not an instruction. The generator keeps **40 columns
+clear** of every building and off the strips and their take-off runs, moving
+the ox to the nearest column that has room and saying so in a note:
+
+```
+note: the ox asked for at 1310 stands at 1262: an ox needs 40 columns clear
+      of a building, or bombing that building costs 200
+```
+
+It also tries to keep the two oxen **200 columns apart** — two animals in
+one field are one hazard, and one stray bomb can cost 400. That one is a
+preference: if the map has nowhere better the ox is still placed and a note
+says they are crowded. Only a map with no room at all within 600 columns is
+refused.
+
+The classic map's own numbers, for reference: oxen at 1376 and 1608, 48 and
+42 columns from the nearest building, 232 apart.

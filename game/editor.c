@@ -27,7 +27,7 @@ static const char *const tool_name[ED_TOOL_COUNT] = {
     "TERRAIN", "BUILDING", "RUNWAY", "OX",
 };
 static const char *const kind_name[4] = {
-    "HOUSE", "FACTORY", "FUEL DUMP", "HANGAR",
+    "HANGAR", "FACTORY", "FUEL DUMP", "TANK",
 };
 static const char *const orient_name[2] = {
     "FACING RIGHT", "FACING LEFT",

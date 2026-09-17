@@ -18,10 +18,10 @@
 
 /* Building types, matching the four original silhouettes. */
 enum {
-    TARGET_HOUSE   = 0,   /* pitched roof with a flagpole                 */
+    TARGET_HANGAR  = 0,   /* flagged shed with the open front            */
     TARGET_FACTORY = 1,   /* windowed block with twin chimneys            */
     TARGET_FUEL    = 2,   /* fuel dump -- worth 200 instead of 100        */
-    TARGET_HANGAR  = 3,   /* wide shed                                    */
+    TARGET_TANK    = 3,   /* turret and a gun over tracks                 */
 };
 
 /* Limits the loader enforces.  They are the shapes the simulation already

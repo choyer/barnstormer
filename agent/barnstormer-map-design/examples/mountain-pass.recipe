@@ -1,12 +1,14 @@
 # A pass between two ranges: the fields sit in the open at either end, and
 # everything worth bombing is on the far side of the high ground.
 #
-# Note where the player's three buildings are -- behind the field, not in
-# front of it.  An aeroplane needs 137 columns to climb over building height
-# and the classic map leaves 170 clear ahead of each strip.
+# Each field brings its own hangar and fuel dump, and the player's field
+# brings the tank that defends it, 170 columns out towards the enemy.  So a
+# recipe asks only for the enemy's buildings.  An aeroplane needs 137
+# columns to climb over building height and the classic map leaves 170 clear
+# ahead of each strip.
 name Mountain Pass
 author CRH
-seed 4718
+seed 4819
 
 land plain    width=520  h=44
 land ridge    width=600  peak=118 rough=3
@@ -17,8 +19,7 @@ land plain    width=940  h=48
 field player at=480  facing=right
 field enemy  at=2620 facing=left
 
-buildings owner=player from=170  to=360  count=3  kinds=house,factory
-buildings owner=enemy  from=1180 to=2280 count=17 kinds=factory,fuel,hangar,house
+buildings owner=enemy from=1180 to=2280 count=9 kinds=factory,fuel,tank,hangar
 
 ox at=1500
 ox at=1560

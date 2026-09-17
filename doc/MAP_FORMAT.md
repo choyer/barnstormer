@@ -40,7 +40,7 @@ runway 588 0
 runway 1720 1
 runway 2456 1
 
-# Buildings: x, kind.  0 house, 1 factory, 2 fuel dump, 3 hangar.
+# Buildings: x, kind.  0 hangar, 1 factory, 2 fuel dump, 3 tank.
 # A fuel dump is worth 200 points and explodes harder; the rest are 100.
 target 191 1
 target 284 3

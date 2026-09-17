@@ -185,9 +185,9 @@ static int validate(const map_t *lv, const lines_t *ln)
         const map_target_t *tg = &lv->targets[i];
         int at = line_of(ln ? ln->target : NULL, i);
 
-        if (tg->kind > TARGET_HANGAR) {
+        if (tg->kind > TARGET_TANK) {
             seterr(at, "building kind %u, expected 0..%d",
-                   tg->kind, TARGET_HANGAR);
+                   tg->kind, TARGET_TANK);
             return -1;
         }
         if (tg->x + MAP_TARGET_WIDTH > lv->width) {
@@ -487,9 +487,9 @@ int map_load(const char *path, map_t **out)
                 break;
             }
             if (!number(token(&p), 0, 0xFFFF, &x) ||
-                !number(token(&p), 0, TARGET_HANGAR, &kind)) {
+                !number(token(&p), 0, TARGET_TANK, &kind)) {
                 REJECT("a building needs an x and a kind, 0..%d",
-                       TARGET_HANGAR);
+                       TARGET_TANK);
                 break;
             }
             a->targets[n_targets].x = (uint16_t)x;

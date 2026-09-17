@@ -39,11 +39,47 @@ Against the computer, slots 1 and 6 are used as well; in networked play, 3 and
 puts enemy aircraft on your own strip — so give a map eight, four at each
 end, and the arrangement works in every mode.
 
+**An airfield is a strip plus a hangar and a fuel dump — and the player's
+also has a tank.** That is what the classic map has, and it is the layout
+this skill reproduces on every map. Offsets are measured from the home
+strip's `x`:
+
+| | classic player field | classic enemy field | rule |
+|---|---|---|---|
+| home strip | slot 0 at 1270, facing right | slot 7 at 1720, facing left | the recipe's `at=` |
+| hangar (kind 0) | 1240 | 1750 | 30 columns behind the strip |
+| fuel dump (kind 2) | 1210 | 1780 | 60 columns behind the strip |
+| tank (kind 3) | 1440 | — | the player's only: 170 columns beyond the last strip, facing the enemy |
+
+Both airfield buildings belong to the side whose field it is, and the
+player's tank is the third building it owns, which is why a recipe places
+none of the player's three. The tank sits between the two fields on
+purpose: it is a defensive unit, so it is what an attack run meets first.
+The classic map's third player building is at 1440 — exactly 170 columns
+past its home strip at 1270, past the take-off run rather than inside it.
+
 **Fuel is derived from the map width** (`MAXFUEL = 3 × MAX_X`), so the
 distance between the fields is a balance decision as much as a layout one.
 
 **A building stands on a pad the game levels under it**, so terrain under
 buildings is cosmetic. Terrain under a runway is not.
+
+**An ox is a liability, not a decoration.** Killing one costs the killer
+**200 points** (`collision.c`, `score_penalty(g, ttype, agent, 200)`), and
+it dies to anything that touches it except the blast: the OBJ_OX case
+returns early only for `OBJ_EXPLOSION` and `OBJ_STARBURST`, so bullets,
+bombs and aircraft all kill it. Two consequences for layout:
+
+* **Keep 40 columns between an ox and any building.** Otherwise the
+  building cannot be attacked without risking the fine, which makes it a
+  trap rather than a target. The classic map leaves 48 and 42.
+* **Keep the two oxen apart** — 200 columns or more; the classic map has
+  232. Side by side they are one hazard worth 400, and a single wide bomb
+  run can take both.
+* **Keep them off the strips and out of the take-off runs.** An aeroplane
+  that hits an ox is wounded *and* fined, which is a rough way to start a
+  sortie. (The classic map does put one at the end of a reserve strip at
+  1360 — a quirk worth not copying.)
 
 ## What the aeroplane can do
 
