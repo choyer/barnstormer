@@ -177,8 +177,14 @@ the one building on the map that is meant to be in the way.
 ox at=1500
 ```
 
-At most two, and worth having: they are the only thing in the game that is
-nobody's enemy. The height is worked out from the ground under them.
+**Nought, one or two — two is the maximum, not the default.** Cattle are
+worth having: they are the only thing in the game that is nobody's enemy,
+and they are the only thing a pilot can lose points to by accident. But a
+map with no cattle is a perfectly good map, and twenty maps that all have
+exactly two oxen look like twenty maps made by the same rule. Vary it: an
+empty valley, a single animal on the flat, a pair a long way apart.
+
+The height is worked out from the ground under them.
 
 **They need room.** Killing an ox costs 200 points, and a bullet or a bomb
 kills it outright — only the blast itself spares it. An ox standing against

@@ -57,7 +57,7 @@ import subprocess
 import sys
 from xml.sax.saxutils import escape
 
-VERSION = "1.5.0"              # bump when the drawing changes: it is a cache key
+VERSION = "1.6.0"              # bump when the drawing changes: it is a cache key
 MAP_FORMAT_VERSION = 1
 MAP_MAGIC = "barnstormer-map"
 MAP_MAGIC_WAS = "barnstormer-level"
@@ -571,8 +571,9 @@ def render(m, recipe=None, layout="full", scale=2, label=None):
     # sprite item carries its kind and its count separately: the count is
     # the number being read off, so it is drawn in the HUD white while the
     # word stays dim.
-    items = [("strip", None, "airfield", None),
-             ("sprite", (SPRITE_OX[0], False), "ox", len(m["oxen"]))]
+    items = [("strip", None, "airfield", None)]
+    if m["oxen"]:                           # a map without cattle says nothing
+        items.append(("sprite", (SPRITE_OX[0], False), "ox", len(m["oxen"])))
     for kinds, enemy, who in ((mine, False, "Player:"),
                               (theirs, True, "Enemy:")):
         for kind in (3, 2, 1, 0):

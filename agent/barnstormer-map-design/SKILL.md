@@ -196,15 +196,18 @@ what the aeroplane can do. The eight that matter most:
    over the outer 140 columns. The world simply stops at column 0 and column
    3000 and an aeroplane that reaches either just sits there against nothing;
    a wall says so in the only language the game has. Keep fields and
-   buildings between **140 and 2860** — the generator refuses anything inside
-   the walls.
-7. **Cattle need daylight around them.** An ox costs 200 points to whoever
-   kills it and dies to any bullet or bomb, so one standing against a
-   building makes that building unattackable rather than interesting.
-   `mapgen.py` moves an ox to the nearest column with **40 clear** of every
-   building and off the strips, tries to keep the two **200 apart**, and
-   reports every move as a note. Read those notes: an ox that had to travel
-   300 columns is telling you the buildings are packed too tightly.
+   buildings between **140 and 2860** — the generator refuses anything
+   inside the walls.
+7. **Cattle are optional, and need daylight around them.** Nought, one or
+   two: two is the maximum, not the default, and a map with none is a fine
+   map — every map carrying exactly two is a tell that nobody chose. An ox
+   costs 200 points to whoever kills it and dies to any bullet or bomb, so
+   one standing against a building makes that building unattackable rather
+   than interesting. `mapgen.py` moves an ox to the nearest column with
+   **40 clear** of every building and off the strips, tries to keep a pair
+   **200 apart**, and reports every move as a note. Read those notes: an ox
+   that had to travel 300 columns is telling you the buildings are packed
+   too tightly.
 8. **A map is terrain first, buildings second.** The count is a range, not a
    target: **10 at the floor, 20 at the ceiling**, and most maps want 12–15.
    Ten is arithmetic — the player's three have to land on index 7, 8 and 9,
