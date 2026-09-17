@@ -64,18 +64,51 @@ to total 3000 as usual — the walls are carved out of the ends afterwards.
 ## `field` — the airfields
 
 ```
-field player at=420 facing=right
+field player at=420  facing=right
 field enemy  at=2580 facing=left
+
+field player at=1020 facing=right spread=dispersed
+field enemy  at=1980 facing=left  spread=dispersed
 ```
 
-One of each is required. `at=` is where the first strip goes and `facing=` is
-the way the aeroplanes point (`right` or `left` — point them at each other).
+One of each is required. `at=` is where the **home strip** goes and `facing=`
+is the way the aeroplanes point (`right` or `left` — point them at each
+other).
 
-The generator puts **four strips at each end** and flattens a pad under them
-plus a 170-column run in the direction they face, blending back into the land
-beyond. Four because the game's spawn tables are positional and index up to
-eight slots; laying 0–3 at the player's end and 4–7 at the enemy's means every
-mode puts friends at one end and enemies at the other.
+Each side gets **four strips**, because the game's spawn tables are
+positional and index eight slots; laying 0–3 at the player's end and 4–7 at
+the enemy's means every mode puts friends at one end and enemies at the
+other.
+
+### `spread=` — where those four go
+
+| `spread=` | Layout | Reads as |
+|---|---|---|
+| `line` (default) | the four in a row from `at`, 50 columns apart | one airfield; every aeroplane starts in the same place |
+| `dispersed` | the home strip, two more 60 and 90 columns towards the enemy, and a fourth **700 columns behind the field** | two airfields a side, as the classic map has it |
+
+`dispersed` is what the classic map does — player strips at 1270, 1330, 1360
+and 588; enemy at 1720, 1660, 1630 and 2456 — and it is worth having. The
+outlier takes **slot 1** (player) or **slot 6** (enemy), which is the second
+slot the computer mode uses, so the second aeroplane of each side takes off
+from the far strip: attacks arrive from two directions and there is no single
+place to watch. It also needs room behind the field, so keep a dispersed
+field at least 900 columns from its own end of the world.
+
+### What each strip keeps in front of it
+
+A strip is flattened with a run in the direction it faces, blending back
+into the land beyond, and **the home strip gets more run than the reserves**:
+
+| | Clear run | Why |
+|---|---|---|
+| home strip (slot 0 / 7) | **170** | where the sortie that matters starts; 137 is what an aeroplane needs to clear building height |
+| reserve strips | **80** | measured on the classic map, whose six reserves have 51, 65, 80, 87, 95 and 110 — every one cut short by a tank or rising ground, and it flies |
+
+That is what makes four strips affordable: four full corridors a side would
+flatten a third of the world for aeroplanes that are parked. Strips that
+stand together share one pad; a dispersed outlier gets its own, so the land
+between them is left alone.
 
 Every field also comes with **its own hangar and fuel dump**, placed for you
 behind the home strip exactly as the classic map places them: the hangar 30

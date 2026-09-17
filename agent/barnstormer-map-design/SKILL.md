@@ -1,7 +1,7 @@
 ---
 id: barnstormer-map-design
 name: barnstormer-map-design
-version: 1.6.0
+version: 1.7.0
 description: Design and generate Barnstormer map files (.map) from a text recipe - terrain, airfields, buildings and cattle. Use when asked to make, generate, design or fix a map, landscape or terrain for Barnstormer/Sopwith, or when editing a .map or .recipe file. Handles the file format, the placement rules the game does not document, and checking that what comes out can actually be flown.
 entrypoint: SKILL.md
 manifest: manifest.json
@@ -177,12 +177,17 @@ what the aeroplane can do. The eight that matter most:
    an airfield. Five buildings are therefore already placed, all three of
    the player's among them, so a recipe writes no `owner=player` line and
    asks only for the enemy's.
-2. **Keep 170 columns clear in front of every airfield.** An aeroplane needs
-   103 columns to leave the ground and 137 to climb over building height. A
-   hillside or a building inside that is a wall at the end of the runway. The
-   classic map leaves 170 and puts the player's own buildings *behind* the
-   field. `mapgen.py` flattens a run for you and refuses buildings that
-   fall inside it.
+2. **The home strip keeps 170 columns clear; a reserve keeps 80.** An
+   aeroplane needs 103 columns to leave the ground and 137 to climb over
+   building height, and a hillside or a building inside the run is a wall at
+   the end of the runway. The classic map leaves 170 ahead of each home
+   field and 51–110 ahead of its six reserves, and flies — so `mapgen.py`
+   flattens each strip's own run, refuses buildings inside it, and does not
+   spend four full corridors a side on parked aeroplanes.
+   `field ... spread=dispersed` puts the fourth strip **700 columns behind
+   the field** in slot 1 or 6, as the classic map does, so the second
+   aeroplane of each side takes off from a second airfield and an attack can
+   come from either direction.
 3. **The order of the buildings decides whose they are.** The game gives the
    player exactly the buildings at index 7, 8 and 9. `mapgen.py` emits them
    in the right order from `owner=`; if you write a `.map` by hand, you must

@@ -39,6 +39,35 @@ Against the computer, slots 1 and 6 are used as well; in networked play, 3 and
 puts enemy aircraft on your own strip — so give a map eight, four at each
 end, and the arrangement works in every mode.
 
+**Strips come in twos and fours, and the classic map scatters them.** Its
+four per side are not in one place: player 1270 (slot 0), 1330, 1360 and
+**588**; enemy 1720 (slot 7), 1660, 1630 and **2456**. The outlier takes
+slot 1 or 6 — the second slot the computer mode uses — so the second
+aeroplane of each side spawns 700 columns away from its own field. That is
+`spread=dispersed` in a recipe, and it is what makes an attack able to
+arrive from two directions.
+
+**A reserve strip does not get the run a home strip gets.** Measured on the
+classic map, the clear ground ahead of each of its eight strips before a
+building or rising terrain:
+
+| Slot | x | Faces | Clear run | Cut short by |
+|---|---|---|---|---|
+| 0 (player home) | 1270 | right | **170** | the tank at 1440 |
+| 7 (enemy home) | 1720 | left | **155** | the tank at 1550 |
+| 2 | 1330 | right | 110 | the tank at 1440 |
+| 5 | 1660 | left | 95 | the tank at 1550 |
+| 1 | 588 | right | 87 | ground rising from 26 to 43 |
+| 3 | 1360 | right | 80 | the tank at 1440 |
+| 4 | 1630 | left | 65 | the tank at 1550 |
+| 6 | 2456 | left | 51 | the tank at 2390 |
+
+So the home strips get 155–170 and the reserves 51–110, and the map is
+flyable: `flytest` gets every aeroplane away. This skill keeps **170 for a
+home strip and 80 for a reserve**, which is what makes four strips a side
+affordable — four full corridors would flatten a third of the world for
+aeroplanes that are parked.
+
 **An airfield is a strip plus a hangar and a fuel dump — and the player's
 also has a tank.** That is what the classic map has, and it is the layout
 this skill reproduces on every map. Offsets are measured from the home

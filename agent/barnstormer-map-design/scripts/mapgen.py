@@ -27,7 +27,7 @@ import os
 import re
 import sys
 
-VERSION = "1.6.0"          # this skill's version; see ../manifest.json
+VERSION = "1.7.0"          # this skill's version; see ../manifest.json
 MAP_FORMAT_VERSION = 1     # what the generated file declares in its header
 
 MAX_X, MAX_Y = 3000, 200
@@ -56,6 +56,15 @@ WALL = 160                 # ground above this is a wall, not scenery
 # strip in a field; with them it is somewhere aircraft come from.
 FIELD_HANGAR_BACK = 30     # the hangar, behind the home strip
 FIELD_FUEL_BACK = 60       # the fuel dump, behind that
+
+# Strips.  The home strip keeps the full run; a reserve keeps less, which is
+# what the classic map does -- measured on it, the clear ground ahead of its
+# eight strips is 170 and 155 for the two home fields and 51, 65, 80, 87, 95
+# and 110 for the six reserves, and it flies.  Four full corridors per side
+# would eat a third of the world for aeroplanes that are parked.
+RESERVE_RUN = 80           # clear ground a reserve strip keeps in front
+SPREAD_NEAR = (60, 90)     # classic: player 1330/1360 off 1270
+SPREAD_FAR = 700           # classic: player 588 and enemy 2456, ~700 back
 
 # Cattle.  The classic map's own clearances: its oxen stand 48 and 42
 # columns from the nearest building and 232 columns apart.
@@ -239,6 +248,54 @@ def add_edges(g):
 
 # ---- fields --------------------------------------------------------------
 
+def strip_layout(at, facing, spread, who):
+    """Where a side's four strips go, and which game slot each one takes.
+
+    Two layouts, both measured off the classic map:
+
+    * `line` -- the four in a row from `at`, 50 columns apart, all at the
+      same end.  Simple, and every aeroplane spawns in one place.
+    * `dispersed` -- what the classic map actually does: the home strip, two
+      more 60 and 90 columns towards the enemy, and a fourth about 700
+      columns behind the field.  Classic player strips are 1270 (slot 0),
+      1330, 1360 and 588; the enemy's are 1720 (slot 7), 1660, 1630 and
+      2456.  The outlier takes slot 1 or 6 -- the second slot the computer
+      mode uses -- so the second aeroplane of each side takes off from the
+      far strip and an attack can come from two directions.
+
+    Returns [(slot, x, is_home)] in slot order.
+    """
+    d = 1 if facing == "right" else -1
+    home, second, third, fourth = ((0, 1, 2, 3) if who == "player"
+                                   else (7, 6, 5, 4))
+    if spread == "line":
+        return [(home, at, True),
+                (second, at + d * 50, False),
+                (third, at + d * 100, False),
+                (fourth, at + d * 150, False)]
+    if spread == "dispersed":
+        return [(home, at, True),
+                (second, at - d * SPREAD_FAR, False),
+                (third, at + d * SPREAD_NEAR[0], False),
+                (fourth, at + d * SPREAD_NEAR[1], False)]
+    raise Fail(f"{spread!r} is not a spread: line or dispersed")
+
+
+def strip_run(is_home):
+    """How much clear ground a strip needs in front of it.
+
+    The home strip gets the full run the classic map leaves its own: 170
+    columns, which is more than the 137 an aeroplane needs to climb over
+    building height.  A reserve strip gets less, because that is what the
+    classic map gives its reserves -- measured, the clear run ahead of each
+    of its eight strips is 170 and 155 for the two home fields and 51, 65,
+    80, 87, 95 and 110 for the reserves, every one of them cut short by a
+    tank or by rising ground, and the map flies.  Reserves are where the
+    spare aeroplanes sit, not where the sortie that matters starts from.
+    """
+    return CORRIDOR if is_home else RESERVE_RUN
+
+
 def place_fields(ground, fields):
     """Lay out both ends and flatten what each one needs.
 
@@ -248,9 +305,11 @@ def place_fields(ground, fields):
     that the hillside beyond the pad is a wall at the end of the runway, which
     is the commonest way a generated map turns out unflyable.
 
-    The flat also runs the other way, far enough for the hangar and the fuel
-    dump behind the home strip to stand on the field rather than on whatever
-    the land was doing there.
+    Each strip gets its own run -- the full 170 for the home strip, less for
+    the reserves -- so four strips do not cost four full corridors of the
+    world.  The flat also runs the other way, far enough for the hangar and
+    the fuel dump behind the home strip to stand on the field rather than on
+    whatever the land was doing there.
 
     Slots are positional in the game: 0 is the player, 7 the enemy, and vs the
     computer 1 and 6 as well.  Laying slots 0-3 at the player's end and 4-7 at
@@ -265,28 +324,33 @@ def place_fields(ground, fields):
         if "at" not in o:
             raise Fail(f"line {n}: a field needs at=")
         ends[who] = (int(o["at"]), o.get("facing", "right" if who == "player"
-                                         else "left"))
+                                         else "left"),
+                     o.get("spread", "line"))
     for who in ("player", "enemy"):
         if who not in ends:
             raise Fail(f"there is no {who} field; a map needs both")
 
     orig = list(ground)
     runways = [None] * MAX_RUNWAYS
+    runs, tanks = {}, {}
 
-    for who, slots in (("player", [0, 1, 2, 3]), ("enemy", [7, 6, 5, 4])):
-        at, facing = ends[who]
+    for who in ("player", "enemy"):
+        at, facing, spread = ends[who]
         orient = 0 if facing == "right" else 1
         out = 1 if orient == 0 else -1          # the way they take off
 
-        xs = []
-        for i in range(len(slots)):
-            x = at + i * (RUNWAY_SPAN + 29) * (1 if who == "player" else -1)
-            xs.append(max(0, min(MAX_X - RUNWAY_SPAN - 1, x)))
+        layout = strip_layout(at, facing, spread, who)
+        xs = [x for _slot, x, _home in layout]
 
         if min(xs) < EDGE_WIDTH + 20 or max(xs) > MAX_X - EDGE_WIDTH - 60:
-            raise Fail(f"the {who} field at {at} is in the wall at the end of "
-                       f"the world; keep fields between {EDGE_WIDTH + 20} and "
-                       f"{MAX_X - EDGE_WIDTH - 80}")
+            raise Fail(f"the {who} field at {at} puts a strip at "
+                       f"{min(xs) if min(xs) < EDGE_WIDTH + 20 else max(xs)} "
+                       f"in the wall at the end of the world"
+                       + (f"; spread=dispersed puts one strip {SPREAD_FAR} "
+                          f"columns behind the field, so keep the field "
+                          f"itself further in" if spread == "dispersed" else
+                          f"; keep fields between {EDGE_WIDTH + 20} and "
+                          f"{MAX_X - EDGE_WIDTH - 80}"))
 
         # The hangar and the fuel dump sit behind the home strip, and they
         # are as much part of the world's edge arithmetic as the strips are.
@@ -302,48 +366,82 @@ def place_fields(ground, fields):
                            f"{EDGE_WIDTH + room} and "
                            f"{MAX_X - EDGE_WIDTH - room}")
 
-        # The player's tank stands past the far end of every take-off run,
-        # between its own field and the enemy's: it is what the enemy meets
-        # first, and it must not be a wall at the end of a strip.
-        tank = field_tank(xs, facing) if who == "player" else None
+        # Strips that stand together share one pad; a strip on its own gets
+        # its own.  Flattening everything between a dispersed outlier and
+        # the home cluster would level 700 columns of landscape to give two
+        # aeroplanes somewhere to park.
+        groups, cur = [], [layout[0]]
+        for item in sorted(layout, key=lambda t: t[1])[1:]:
+            near = sorted(cur, key=lambda t: t[1])
+            if item[1] - (near[-1][1] + RUNWAY_SPAN) <= 200:
+                cur.append(item)
+            else:
+                groups.append(cur)
+                cur = [item]
+        groups.append(cur)
+        groups = [sorted(gp, key=lambda t: t[1]) for gp in groups]
+
+        # Where every take-off run ends, which is where the player's tank
+        # stands: past all of them, whichever strip is furthest along.
+        stops = [(x + RUNWAY_SPAN + strip_run(home)) if out > 0
+                 else (x - strip_run(home))
+                 for _slot, x, home in layout]
+        run_end = max(stops) if out > 0 else min(stops)
+
+        tank = None
+        if who == "player":
+            tank = run_end + 1 if out > 0 else run_end - TARGET_WIDTH - 1
         if tank is not None and not (
                 EDGE_WIDTH <= tank and tank + TARGET_WIDTH <= MAX_X - EDGE_WIDTH):
             raise Fail(f"the player field at {at} leaves no room for its tank "
-                       f"at {tank}: it stands {CORRIDOR} columns beyond the "
-                       f"last strip, facing the enemy. Move the field back "
+                       f"at {tank}: it stands just past the far end of every "
+                       f"take-off run, facing the enemy. Move the field back "
                        f"from the end of the world")
 
-        lo, hi = min(xs) - 8, max(xs) + RUNWAY_SPAN + 8
-        span = [orig[i] for i in range(max(0, lo), min(MAX_X, hi))]
-        pad = sorted(span)[len(span) // 2]
-
-        # The strips, the run in front of them, the apron behind that the
-        # airfield buildings stand on, and the ground under the tank.
         back = FIELD_FUEL_BACK + TARGET_WIDTH + 8
-        apron_lo = (lo if out > 0 else lo - CORRIDOR)
-        apron_hi = (hi + CORRIDOR if out > 0 else hi)
-        if out > 0:
-            apron_lo = min(apron_lo, at - back)
-            if tank is not None:
-                apron_hi = max(apron_hi, tank + TARGET_WIDTH + 8)
-        else:
-            apron_hi = max(apron_hi, at + back)
-            if tank is not None:
-                apron_lo = min(apron_lo, tank - 8)
-        for i in range(max(0, apron_lo), min(MAX_X, apron_hi)):
-            ground[i] = pad
+        for gp in groups:
+            has_home = any(home for _slot, _x, home in gp)
+            gxs = [x for _slot, x, _home in gp]
+            lo, hi = min(gxs) - 8, max(gxs) + RUNWAY_SPAN + 8
+            span = [orig[i] for i in range(max(0, lo), min(MAX_X, hi))]
+            pad = sorted(span)[len(span) // 2]
 
-        # Back into the land beyond, gently enough to fly over.
-        for k in range(140):
-            i = (apron_hi + k) if out > 0 else (apron_lo - 1 - k)
-            if not 0 <= i < MAX_X:
-                break
-            ground[i] = int(round(blend(k, pad, orig[i], 140)))
+            # This group's strips, and the run each of them keeps.
+            gstops = [(x + RUNWAY_SPAN + strip_run(home)) if out > 0
+                      else (x - strip_run(home)) for _slot, x, home in gp]
+            gend = max(gstops) if out > 0 else min(gstops)
 
-        for slot, x in zip(slots, xs):
+            flat_lo, flat_hi = lo, hi
+            if out > 0:
+                flat_hi = max(flat_hi, gend + 8)
+            else:
+                flat_lo = min(flat_lo, gend - 8)
+            if has_home:                    # the airfield proper
+                if out > 0:
+                    flat_lo = min(flat_lo, at - back)
+                    if tank is not None:
+                        flat_hi = max(flat_hi, tank + TARGET_WIDTH + 8)
+                else:
+                    flat_hi = max(flat_hi, at + back)
+                    if tank is not None:
+                        flat_lo = min(flat_lo, tank - 8)
+
+            for i in range(max(0, flat_lo), min(MAX_X, flat_hi)):
+                ground[i] = pad
+
+            # Back into the land at both ends, gently enough to fly over.
+            for k in range(140):
+                for i in (flat_hi + k, flat_lo - 1 - k):
+                    if 0 <= i < MAX_X:
+                        ground[i] = int(round(blend(k, pad, orig[i], 140)))
+
+        for slot, x, home in layout:
             runways[slot] = (x, orient)
+            runs[slot] = strip_run(home)
+        if tank is not None:
+            tanks[who] = tank
 
-    return runways, ends
+    return runways, ends, runs, tanks
 
 
 # ---- buildings and cattle ------------------------------------------------
@@ -409,23 +507,7 @@ def field_buildings(at, facing):
     return (at + back * FIELD_HANGAR_BACK, at + back * FIELD_FUEL_BACK)
 
 
-def field_tank(strips, facing):
-    """Where the player's tank goes: the field's own defence.
-
-    The third building the player owns is a defensive unit, so it stands on
-    the enemy's side of its airfield -- between the two fields, the first
-    thing an attack run meets -- and one column past the far end of every
-    take-off run, so it is cover rather than a wall at the end of a strip.
-    The classic map does the same thing: its player field is slot 0 at 1270
-    facing right, and its third player building sits at 1440, exactly 170
-    columns along.
-    """
-    if facing == "right":
-        return max(strips) + RUNWAY_SPAN + CORRIDOR + 1
-    return min(strips) - CORRIDOR - TARGET_WIDTH - 1
-
-
-def place_buildings(groups, singles, runways, ends):
+def place_buildings(groups, singles, runways, ends, runs, tanks):
     """Space each group out, keeping clear of the strips and the ends.
 
     Every airfield brings its own hangar and fuel dump, and the player's
@@ -441,20 +523,21 @@ def place_buildings(groups, singles, runways, ends):
                    for rx, _ in runways if rx is not None)
 
     def in_takeoff_path(x):
-        """In front of a field, within the run it needs to get airborne.
+        """In front of a strip, within the run it needs to get airborne.
 
-        The classic map leaves 170 columns ahead of each field and puts the
-        rest of the buildings behind it; an aeroplane needs 137 to climb over
-        building height, so anything inside that is a wall at the end of the
-        runway."""
-        for r in runways:
+        Each strip has its own run -- 170 for a home strip, less for a
+        reserve, as the classic map has it -- so the ground a building may
+        not stand on is measured per strip rather than as one corridor for
+        the whole field."""
+        for slot, r in enumerate(runways):
             if r is None:
                 continue
             rx, orient = r
-            lo, hi = ((rx - CORRIDOR, rx) if orient
-                      else (rx + RUNWAY_SPAN, rx + CORRIDOR))
+            run = runs[slot]
+            lo, hi = ((rx - run, rx) if orient
+                      else (rx + RUNWAY_SPAN, rx + run))
             if x + TARGET_WIDTH - 1 >= lo and x <= hi:
-                return rx
+                return rx, run
         return None
 
     out = {"player": [], "enemy": []}
@@ -462,18 +545,16 @@ def place_buildings(groups, singles, runways, ends):
 
     # The airfields first, so they are the ones a clash is reported against.
     for who in ("player", "enemy"):
-        at, facing = ends[who]
+        at, facing, _spread = ends[who]
         hangar, fuel = field_buildings(at, facing)
         out[who] += [(hangar, KINDS["hangar"]), (fuel, KINDS["fuel"])]
         reserved[hangar] = f"the {who} field's hangar"
         reserved[fuel] = f"the {who} field's fuel dump"
 
-    # And the player's tank, which is the third building it owns.
-    at, facing = ends["player"]
-    strips = [r[0] for i, r in enumerate(runways) if r and i in (0, 1, 2, 3)]
-    tank = field_tank(strips, facing)
-    out["player"].append((tank, KINDS["tank"]))
-    reserved[tank] = "the player's tank"
+    # And the player's tank, which is the third building it owns; where it
+    # goes was worked out with the field, since the flat had to reach it.
+    out["player"].append((tanks["player"], KINDS["tank"]))
+    reserved[tanks["player"]] = "the player's tank"
 
     for n, o in singles:
         owner = o.get("owner")
@@ -527,13 +608,14 @@ def place_buildings(groups, singles, runways, ends):
                                f"this group beyond them")
             blocked = in_takeoff_path(x)
             if blocked is not None:
+                rx, run = blocked
                 raise Fail(
                     f"a building at {x} stands in the take-off path of the "
-                    f"field at {blocked}. An aeroplane needs {TAKEOFF_CLEAR} "
-                    f"columns to climb over building height, and the classic "
-                    f"map leaves {CORRIDOR}. Put these buildings behind the "
-                    f"field instead, or start the group beyond column "
-                    f"{blocked + CORRIDOR}")
+                    f"strip at {rx}, which keeps {run} columns clear "
+                    f"({CORRIDOR} for a home strip, {RESERVE_RUN} for a "
+                    f"reserve, as the classic map has it). Put these "
+                    f"buildings behind the field instead, or start the group "
+                    f"beyond column {rx + run}")
 
     enemy, player = out["enemy"], out["player"]
     if len(enemy) + len(player) > MAX_TARGETS:
@@ -730,7 +812,7 @@ def relief(ground):
     return max(inland) - min(inland), round(sd, 1)
 
 
-def lint(ground, runways, targets, oxen):
+def lint(ground, runways, runs, targets, oxen):
     """Things that load and fly but make a poor map."""
     say = []
 
@@ -749,32 +831,33 @@ def lint(ground, runways, targets, oxen):
         x, orient = r
         step = -1 if orient else 1
         pad = ground[x]
-        for d in range(RUNWAY_SPAN, TAKEOFF_CLEAR):
+        want = runs[slot]                   # this strip's own run
+        for d in range(RUNWAY_SPAN, want):
             probe = x + step * d
             if not (0 <= probe < MAX_X):
                 say.append(f"runway {slot + 1} at {x} faces "
                            f"{'left' if orient else 'right'} with only {d} "
-                           f"columns of world in front of it; take-off needs "
-                           f"{TAKEOFF_CLEAR}")
+                           f"columns of world in front of it; it keeps "
+                           f"{want}")
                 break
             if ground[probe] > pad + 16:
                 say.append(f"runway {slot + 1} at {x} has ground "
                            f"{ground[probe] - pad} above the field {d} "
-                           f"columns ahead; it needs {TAKEOFF_RUN} clear to "
-                           f"get airborne and {TAKEOFF_CLEAR} to clear "
-                           f"building height")
+                           f"columns ahead; it keeps {want} clear, and an "
+                           f"aeroplane needs {TAKEOFF_RUN} to get airborne")
                 break
 
     for x, _ in targets:
-        for r in runways:
+        for slot, r in enumerate(runways):
             if r is None:
                 continue
             rx, orient = r
-            lo, hi = ((rx - CORRIDOR, rx) if orient
-                      else (rx + RUNWAY_SPAN, rx + CORRIDOR))
+            run = runs[slot]
+            lo, hi = ((rx - run, rx) if orient
+                      else (rx + RUNWAY_SPAN, rx + run))
             if x + TARGET_WIDTH - 1 >= lo and x <= hi:
                 say.append(f"the building at {x} is in the take-off path of "
-                           f"the field at {rx}")
+                           f"the strip at {rx}")
 
     # Cattle: the hard clearance is enforced in place_oxen(); these are the
     # judgement calls.
@@ -831,9 +914,9 @@ def main():
         rec = parse(args.recipe)
         rng = Rng(rec["seed"])
         ground = build_terrain(rec["land"], rng)
-        runways, ends = place_fields(ground, rec["fields"])
+        runways, ends, strip_runs, tanks = place_fields(ground, rec["fields"])
         targets, n_player = place_buildings(rec["buildings"], rec["singles"],
-                                            runways, ends)
+                                            runways, ends, strip_runs, tanks)
         oxen, ox_notes = place_oxen(ground, rec["oxen"], targets, runways)
     except Fail as e:
         if args.json:
@@ -845,7 +928,7 @@ def main():
 
     out = args.out or os.path.splitext(args.recipe)[0] + ".map"
     runs = write_map(out, rec, ground, runways, targets, oxen)
-    notes = ox_notes + lint(ground, runways, targets, oxen)
+    notes = ox_notes + lint(ground, runways, strip_runs, targets, oxen)
 
     if args.json:
         _json.dump({
